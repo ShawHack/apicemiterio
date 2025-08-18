@@ -11,11 +11,52 @@ function SearchResults() {
   const [totalResults, setTotalResults] = useState(0);
   const location = useLocation();
 
-  // Extrair termo de pesquisa da URL
   const searchParams = new URLSearchParams(location.search);
   const searchTerm = searchParams.get('q') || '';
 
   useEffect(() => {
+    const performSearch = async (term) => {
+      if (!term || term.trim() === '') {
+        setSearchResults([]);
+        setTotalResults(0);
+        return;
+      }
+
+      setLoading(true);
+      setError('');
+      
+      try {
+        const response = await api.get('/sepultados/pesquisa?q=' + encodeURIComponent(term.trim()) + '&limit=50');
+        
+        // Vamos usar a mesma lógica de adivinhação que funcionou na Home
+        let sepultadosArray = [];
+        if (Array.isArray(response.data)) {
+            sepultadosArray = response.data;
+        } else if (Array.isArray(response.data.sepultados)) {
+            sepultadosArray = response.data.sepultados;
+        } else if (Array.isArray(response.data.sepultado)) {
+            sepultadosArray = response.data.sepultado;
+        }
+
+        setSearchResults(sepultadosArray);
+        // Se a API não retornar um total, usamos o tamanho do array como fallback
+        setTotalResults(response.data.total || sepultadosArray.length);
+
+        if (sepultadosArray.length === 0) {
+            console.log('A busca foi bem-sucedida, mas não retornou resultados.');
+        }
+
+      } catch (error) {
+        console.error('Erro na chamada da API:', error);
+        const errorMsg = error?.response?.data?.message || 'Ocorreu um erro inesperado ao realizar a pesquisa.';
+        setError(errorMsg);
+        setSearchResults([]);
+        setTotalResults(0);
+      } finally {
+        setLoading(false);
+      }
+    };
+
     if (searchTerm && searchTerm.trim() !== '') {
       performSearch(searchTerm);
     } else {
@@ -24,92 +65,6 @@ function SearchResults() {
       setError('');
     }
   }, [searchTerm]);
-
-
-
-
-
-
-
-
-
-  // Em src/components/pages/SearchResults.js
-
-const performSearch = async (term) => {
-    if (!term || term.trim() === '') {
-        setSearchResults([]);
-        setTotalResults(0);
-        return;
-    }
-
-    setLoading(true);
-    setError('');
-    
-    try {
-        const response = await api.get('/sepultados/pesquisa?q=' + encodeURIComponent(term.trim()) + '&limit=50');
-        
-        // A resposta da API sempre será um sucesso (200) se a busca for executada.
-        // Verificamos se os dados esperados estão presentes.
-        if (response.data && Array.isArray(response.data.sepultado)) {
-            setSearchResults(response.data.sepultado);
-            setTotalResults(response.data.total); // Confia no total vindo da API
-
-            // Se o array estiver vazio, o próprio componente já renderiza a mensagem "Nenhum resultado encontrado".
-            // Não precisamos setar um erro para isso.
-            if (response.data.sepultado.length === 0) {
-                console.log('A busca foi bem-sucedida, mas não retornou resultados.');
-            }
-
-        } else {
-            // Isso acontece se a API retornar um formato inesperado (não deveria acontecer).
-            console.warn('Formato de resposta inesperado:', response.data);
-            setError('Ocorreu um erro ao processar a resposta do servidor.');
-            setSearchResults([]);
-            setTotalResults(0);
-        }
-    } catch (error) {
-        // O bloco CATCH agora só trata erros REAIS (falha de rede, erro 500, etc.)
-        console.error('Erro na chamada da API:', error);
-        
-        if (error.response) {
-            // Erros que vêm do servidor (ex: 500 - Internal Server Error)
-            setError('Erro interno do servidor. Tente novamente em alguns minutos.');
-        } else if (error.request) {
-            // Erro de rede (sem conexão)
-            setError('Sem conexão com o servidor. Verifique sua internet.');
-        } else {
-            // Outro tipo de erro inesperado
-            setError('Ocorreu um erro inesperado ao realizar a pesquisa.');
-        }
-        
-        setSearchResults([]);
-        setTotalResults(0);
-    } finally {
-        setLoading(false);
-    }
-};
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  const getImageUrl = (sepultado) => {
-    if (sepultado.images && sepultado.images.length > 0 && sepultado.images[0]) {
-      return process.env.REACT_APP_API + '/images/sepultados/' + sepultado.images[0];
-    }
-    return null;
-  };
 
   const highlightSearchTerm = (text, term) => {
     if (!text || !term) return text;
@@ -146,61 +101,61 @@ const performSearch = async (term) => {
         )}
       </div>
 
-      {loading && (
-        <div className={styles.loading}>
-          <p>Pesquisando...</p>
-        </div>
-      )}
-
-      {error && (
-        <div className={styles.error}>
-          <p>{error}</p>
-        </div>
-      )}
+      {loading && <div className={styles.loading}><p>Pesquisando...</p></div>}
+      {error && <div className={styles.error}><p>{error}</p></div>}
 
       {!loading && !error && searchTerm && (
         <>
           <div className={styles.results_count}>
             <p>
-              {totalResults > 0 ? (
-                totalResults + ' resultado' + (totalResults !== 1 ? 's' : '') + ' encontrado' + (totalResults !== 1 ? 's' : '')
-              ) : (
-                'Nenhum resultado encontrado'
-              )}
+              {totalResults > 0
+                ? `${totalResults} resultado${totalResults !== 1 ? 's' : ''} encontrado${totalResults !== 1 ? 's' : ''}`
+                : 'Nenhum resultado encontrado'}
             </p>
           </div>
 
           <div className={styles.sepultado_container}>
             {searchResults.length > 0 ? (
-              searchResults.map((sepultado, index) => (
-                <div key={sepultado._id || sepultado.id || index} className={styles.sepultado_card}>
-                  <div 
-                    className={styles.sepultado_card_image}
-                    style={{
-                      backgroundImage: getImageUrl(sepultado) ? 'url(' + getImageUrl(sepultado) + ')' : 'none'
-                    }}
-                  >
+              searchResults.map((sepultado) => {
+                // --- INÍCIO DA LÓGICA DE IMAGEM PADRONIZADA ---
+                const API = (process.env.REACT_APP_API || '').replace(/\/+$/, '');
+                const raw = sepultado?.images?.[0];
+                const cleaned = typeof raw === 'string' ? raw.trim() : '';
+                const isBad = !cleaned || cleaned === 'null' || cleaned === 'undefined' || cleaned === '/';
+                
+                const srcImg = !isBad
+                  ? `${API}/images/sepultados/${cleaned}`
+                  : '/sepultura-padrao.png';
+                // --- FIM DA LÓGICA ---
+
+                return (
+                  <div key={sepultado._id} className={styles.sepultado_card}>
+                    <div 
+                      className={styles.sepultado_card_image}
+                      style={{ backgroundImage: `url(${srcImg})` }}
+                    >
+                    </div>
+
+                    <h3>{highlightSearchTerm(sepultado.nome, searchTerm)}</h3>
+                    
+                    <h4>Informações da sepultura</h4>
+                    <p>
+                      <span className="bold">Rua: </span>
+                      {sepultado.rua ? highlightSearchTerm(sepultado.rua, searchTerm) : "Inform. desconhecida"}
+                    </p>
+                    <p>
+                      <span className="bold">Quadra: </span>
+                      {sepultado.quadra ? highlightSearchTerm(sepultado.quadra, searchTerm) : "Inform. desconhecida"}
+                    </p>
+                    <p>
+                      <span className="bold">Placa: </span>
+                      {sepultado.chapa ? highlightSearchTerm(sepultado.chapa, searchTerm) : "Inform. desconhecida"}
+                    </p>
+
+                    <Link to={'/sepultados/' + sepultado._id}>Mais detalhes</Link>
                   </div>
-
-                  <h3>{highlightSearchTerm(sepultado.nome, searchTerm)}</h3>
-                  
-                  <h4>Informações da sepultura</h4>
-                  <p>
-                    <span className="bold">Rua: </span>
-                    {sepultado.rua ? highlightSearchTerm(sepultado.rua, searchTerm) : "Inform. desconhecida"}
-                  </p>
-                  <p>
-                    <span className="bold">Quadra: </span>
-                    {sepultado.quadra ? highlightSearchTerm(sepultado.quadra, searchTerm) : "Inform. desconhecida"}
-                  </p>
-                  <p>
-                    <span className="bold">Placa: </span>
-                    {sepultado.chapa ? highlightSearchTerm(sepultado.chapa, searchTerm) : "Inform. desconhecida"}
-                  </p>
-
-                  <Link to={'/sepultados/' + sepultado._id}>Mais detalhes</Link>
-                </div>
-              ))
+                )
+              })
             ) : (
               searchTerm && (
                 <div className={styles.no_results}>

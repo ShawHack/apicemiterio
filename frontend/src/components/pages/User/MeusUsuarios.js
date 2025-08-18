@@ -1,9 +1,11 @@
-
 import api from '../../../utils/api';
 import { useState, useEffect, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import styles from './../Sepultado/Dashboard.module.css';
 import useFlashMessage from '../../../hooks/useFlashMessage';
+
+// 1. Importe o componente RoundedImage para padronizar o visual
+import RoundedImage from '../../layout/RoundedImage';
 
 const LIMIT = 20;
 
@@ -30,20 +32,7 @@ export default function MeusUsuarios() {
       .catch(() => setFlashMessage('Falha ao checar usuário.', 'error'));
   }, [token, setFlashMessage]);
 
-  useEffect(() => {
-    if (!me) return;
-
-    if (me.role === 'admin') {
-      fetchList('');
-    } else {
-      // para não-admin, “lista” com apenas o próprio registro
-      setUsers([{
-        _id: me._id, name: me.name, email: me.email, role: me.role, image: me.image, phone: me.phone
-      }]);
-    }
-  }, [me]); // eslint-disable-line
-
-  async function fetchList(query) {
+  const fetchList = useCallback(async (query) => {
     try {
       const res = await api.get(`/users?q=${encodeURIComponent(query)}&limit=${LIMIT}`, {
         headers: { Authorization: `Bearer ${token}` }
@@ -53,7 +42,19 @@ export default function MeusUsuarios() {
       const msg = err?.response?.data?.message || 'Erro ao carregar usuários';
       setFlashMessage(msg, 'error');
     }
-  }
+  }, [token, setFlashMessage]);
+
+  useEffect(() => {
+    if (!me) return;
+
+    if (me.role === 'admin') {
+      fetchList('');
+    } else {
+      setUsers([{
+        _id: me._id, name: me.name, email: me.email, role: me.role, image: me.image, phone: me.phone
+      }]);
+    }
+  }, [me, fetchList]);
 
   async function removeUser(id) {
     if (!window.confirm('Tem certeza que deseja excluir este usuário?')) return;
@@ -108,29 +109,44 @@ export default function MeusUsuarios() {
       )}
 
       <div className={styles.seplist_container}>
-        {users.map((u) => (
-          <div className={styles.seplist_row} key={u._id}>
-            <img
-              src={u.image ? `${process.env.REACT_APP_API}/images/users/${u.image}` : `${process.env.REACT_APP_API}/images/users/default.jpg`}
-              alt={u.name}
-              width="60"
-              height="60"
-              style={{ borderRadius: '50%', objectFit: 'cover', marginRight: 12 }}
-            />
-            <span className="bold" style={{ minWidth: 160 }}>{u.name}</span>
-            <span style={{ minWidth: 220 }}>{u.email}</span>
-            <span style={{ minWidth: 140, opacity: .8 }}>{u.role}</span>
+        {users.map((user) => {
+          // --- INÍCIO DA NOSSA LÓGICA DE IMAGEM PADRONIZADA ---
+          const API = (process.env.REACT_APP_API || '').replace(/\/+$/, '');
+          
+          // O campo de imagem para usuário é 'image' (singular)
+          const raw = user?.image;
+          const cleaned = typeof raw === 'string' ? raw.trim() : '';
+          const isBad = !cleaned || cleaned === 'null' || cleaned === 'undefined' || cleaned === '/';
+          
+          // A URL final, usando o fallback local para 'usuario-padrao.jpg'
+          const srcImg = !isBad
+            ? `${API}/images/users/${cleaned}`
+            : '/usuario-padrao.jpg'; // <-- Fallback para a imagem na pasta /public
+          // --- FIM DA LÓGICA ---
 
-            <div className={styles.actions}>
-              {(isAdmin || me?._id === u._id) && (
-                <Link to={`/usuarios/edit/${u._id}`}>Editar</Link>
-              )}
-              {isAdmin && me?._id !== u._id && (
-                <button onClick={() => removeUser(u._id)}>Excluir</button>
-              )}
+          return (
+            <div className={styles.seplist_row} key={user._id}>
+              {/* 2. Usando o componente RoundedImage */}
+              <RoundedImage
+                src={srcImg}
+                alt={user.name}
+                width="px75" // Usando uma classe de tamanho padrão do componente
+              />
+              <span className="bold" style={{ minWidth: 160, marginLeft: '12px' }}>{user.name}</span>
+              <span style={{ minWidth: 220 }}>{user.email}</span>
+              <span style={{ minWidth: 140, opacity: .8 }}>{user.role}</span>
+
+              <div className={styles.actions}>
+                {(isAdmin || me?._id === user._id) && (
+                  <Link to={`/usuarios/edit/${user._id}`}>Editar</Link>
+                )}
+                {isAdmin && me?._id !== user._id && (
+                  <button onClick={() => removeUser(user._id)}>Excluir</button>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
 
         {users.length === 0 && (
           <div className={styles.empty_state}>Nenhum usuário encontrado.</div>

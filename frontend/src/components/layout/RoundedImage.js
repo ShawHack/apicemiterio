@@ -1,33 +1,32 @@
-import { useState, useEffect } from 'react'
-import styles from './RoundedImage.module.css'
+// Arquivo: RoundedImage.js (VERSÃO CORRIGIDA E FINAL)
+
+import styles from './RoundedImage.module.css';
 
 function RoundedImage({ src, alt, width }) {
-  const [source, setSource] = useState(src)
+  // A imagem padrão que será usada em caso de erro.
+  // Servida diretamente da pasta /public do frontend.
+  const FALLBACK_IMAGE = '/sepultura-padrao.png';
 
-  // Fallback no BACKEND (você confirmou que funciona)
-  const API = (process.env.REACT_APP_API || '').replace(/\/+$/, '')
-  const BACKEND_FALLBACK = `${API}/images/sepultados/sepultura-padrao.png`
-
-  // Fallback LOCAL (caso REACT_APP_API não esteja setado ou em build estático)
-  const LOCAL_FALLBACK = '/images/sepultados/sepultura-padrao.png'
-
-  // Escolhe qual fallback usar (se API existir usa backend, senão usa local)
-  const FALLBACK = API ? BACKEND_FALLBACK : LOCAL_FALLBACK
-
-  useEffect(() => {
-    setSource(src)
-  }, [src])
+  // Esta função é chamada pelo próprio navegador se o `src` falhar.
+  const handleError = (e) => {
+    // Para evitar um loop infinito se o próprio fallback falhar,
+    // só alteramos a imagem se ela ainda não for o fallback.
+    if (e.currentTarget.src !== window.location.origin + FALLBACK_IMAGE) {
+      e.currentTarget.src = FALLBACK_IMAGE;
+    }
+  };
 
   return (
     <img
       className={`${styles.rounded_image} ${styles[width]}`}
-      src={source}
+      // O `src` inicial é sempre o que foi passado via props.
+      // A lógica de decisão já foi feita no componente pai (MeusSepultados).
+      src={src}
       alt={alt}
-      onError={() => {
-        if (source !== FALLBACK) setSource(FALLBACK)
-      }}
+      // Se o `src` falhar ao carregar, o navegador chama `handleError`.
+      onError={handleError}
     />
-  )
+  );
 }
 
-export default RoundedImage
+export default RoundedImage;

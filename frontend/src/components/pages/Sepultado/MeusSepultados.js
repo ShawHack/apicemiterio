@@ -18,12 +18,13 @@ function MeusSepultados() {
 
   const fetchList = useCallback(async (qArg = '') => {
     const qClean = (qArg || '').trim()
-    const base = isAdmin ? '/sepultados/meussepultados' : '/sepultados/meussepultados'
+    const base = '/sepultados/meussepultados'
     const url = `${base}?q=${encodeURIComponent(qClean)}&limit=${LIMIT}`
 
     try {
       const res = await api.get(url, { headers: { Authorization: `Bearer ${token}` } })
       const data = res.data
+
       if (Array.isArray(data)) setSeps(data)
       else if (Array.isArray(data?.sepults)) setSeps(data.sepults)
       else if (Array.isArray(data?.sepultados)) setSeps(data.sepultados)
@@ -35,7 +36,7 @@ function MeusSepultados() {
       else if (status === 403) setFlashMessage("Sem permissão para acessar esta lista.", "error")
       else setFlashMessage(msg, "error")
     }
-  }, [isAdmin, token, setFlashMessage])
+  }, [token, setFlashMessage, isAdmin])
 
   useEffect(() => {
     if (!roleLoaded) return
@@ -120,27 +121,37 @@ function MeusSepultados() {
         {seps.map((sepultado) => {
           const editar = canEdit(sepultado)
 
-          // Montagem robusta da URL de imagem
-          const API = (process.env.REACT_APP_API || '').replace(/\/+$/, '') // remove barra final
-          const DEFAULT_IMG = API
-            ? `${API}/images/sepultados/sepultura-padrao.png`
-            : `/images/sepultados/sepultura-padrao.png`
-
+        
+        
+        
+          const API = (process.env.REACT_APP_API || '').replace(/\/+$/, '')
           const raw = sepultado?.images?.[0]
-          const cleaned = typeof raw === 'string' ? raw.trim() : ''
-          const isBad = !cleaned || cleaned === 'null' || cleaned === 'undefined' || cleaned === '/'
+          const cleaned = (typeof raw === 'string' ? raw : '').trim()
 
-          const srcImg = !isBad
-            ? (cleaned.startsWith('http') ? cleaned : `${API}/images/sepultados/${cleaned}`)
-            : DEFAULT_IMG
 
-          return (
-            <div className={styles.seplist_row} key={sepultado._id}>
-              <RoundedImage
-                src={srcImg}
-                alt={sepultado.nome}
-                width="px75"
-              />
+
+
+
+
+         const isBad = !cleaned || cleaned === 'null' || cleaned === 'undefined' || cleaned === '/';
+
+// 4. Use a variável 'isBad' para decidir o que renderizar
+const srcImg = !isBad
+  ? (cleaned.startsWith('http' ) ? cleaned : `${API}/images/sepultados/${cleaned}`)
+  : '/sepultura-padrao.png'; // Nosso fallback correto
+
+return (
+  <div className={styles.seplist_row} key={sepultado._id}>
+    <RoundedImage
+      src={srcImg}
+      alt={sepultado.nome}
+      width="px75"
+    />
+
+
+
+
+              
               <span className="bold">{sepultado.nome}</span>
 
               <div className={styles.actions}>

@@ -5,7 +5,7 @@ import api from '../../../utils/api'
 import { useState, useEffect } from 'react'
 import { useParams } from 'react-router-dom'
 import useFlashMessage from '../../../hooks/useFlashMessage'
-import useRole from '../../../hooks/useRole' // para saber isAdmin/userId
+import useRole from '../../../hooks/useRole'
 
 function SepultadoDetails() {
   const [sep, setSep] = useState({})
@@ -14,7 +14,8 @@ function SepultadoDetails() {
   const [carregandoComentarios, setCarregandoComentarios] = useState(false)
   const [expandedImage, setExpandedImage] = useState(null)
 
-  // paginação
+  // ... (toda a sua lógica de hooks e funções permanece a mesma) ...
+  // (useEffect, buscarComentarios, adicionarComentario, etc. - não precisa mudar nada aqui)
   const [page, setPage] = useState(1)
   const [limit] = useState(10)
   const [hasMore, setHasMore] = useState(false)
@@ -195,33 +196,48 @@ const mostrarCreatedAt = (v) => {
   const handleImageClick = (imageUrl) => setExpandedImage(imageUrl)
   const handleCloseModal = () => setExpandedImage(null)
 
+  // --- INÍCIO DA LÓGICA DE IMAGEM ---
+  // Criamos uma lista de URLs seguras para as imagens
+  const API = (process.env.REACT_APP_API || '').replace(/\/+$/, '');
+  const imageList = Array.isArray(sep?.images) ? sep.images : [];
+  const imageSources = imageList.map(img => {
+    const cleaned = typeof img === 'string' ? img.trim() : '';
+    const isBad = !cleaned || cleaned === 'null' || cleaned === 'undefined' || cleaned === '/';
+    return !isBad ? `${API}/images/sepultados/${cleaned}` : '/sepultura-padrao.png';
+  }).filter(Boolean); // Filtra qualquer valor nulo que possa ter sobrado
+
+  // Se não houver nenhuma imagem válida, garantimos que a padrão seja exibida
+  if (imageSources.length === 0 && sep?._id) {
+    imageSources.push('/sepultura-padrao.png');
+  }
+  // --- FIM DA LÓGICA DE IMAGEM ---
+
   return (
     <section className={styles.sepultado_details_container}>
-      {/* Header */}
       <div className={styles.sepultado_details_header}>
         <h1>{sep?.nome || 'Carregando...'}</h1>
       </div>
 
-      {/* Imagens */}
-      {Array.isArray(sep?.images) && sep.images.length > 0 && (
+      {/* --- SEÇÃO DE IMAGENS CORRIGIDA --- */}
+      {imageSources.length > 0 && (
         <div className={styles.sepultado_images}>
-          {sep.images.map((image, index) => {
-            const src = `${process.env.REACT_APP_API}/images/sepultados/${image || 'default.jpg'}`
-            return (
-              <img
-                src={src}
-                alt={sep?.nome || 'Sepultado'}
-                key={index}
-                onClick={() => handleImageClick(src)}
-              />
-            )
-          })}
+          {imageSources.map((src, index) => (
+            <img
+              src={src}
+              alt={`${sep?.nome || 'Sepultado'} - foto ${index + 1}`}
+              key={index}
+              onClick={() => handleImageClick(src)}
+              // Adicionamos um onError como segurança extra
+              onError={(e) => { e.currentTarget.src = '/sepultura-padrao.png'; }}
+            />
+          ))}
         </div>
       )}
+      {/* --- FIM DA SEÇÃO DE IMAGENS --- */}
 
-      {/* Conteúdo principal */}
+      {/* O resto do seu JSX permanece exatamente o mesmo */}
       <div className={styles.main_content}>
-        {/* Esquerda */}
+        {/* ... (coluna da esquerda com informações) ... */}
         <div className={styles.left_column}>
           <div className={styles.info_section}>
             <h3>Dados Pessoais</h3>
@@ -286,8 +302,7 @@ const mostrarCreatedAt = (v) => {
             </div>
           </div>
         </div>
-
-        {/* Direita - Comentários */}
+        {/* ... (coluna da direita com comentários) ... */}
         <div className={styles.right_column}>
           <div className={styles.comments_section}>
             <h3>Homenagens</h3>
@@ -351,7 +366,7 @@ const mostrarCreatedAt = (v) => {
         </div>
       </div>
 
-      {/* Modal para imagem expandida */}
+      {/* Modal */}
       {expandedImage && (
         <div className={styles.image_modal} onClick={handleCloseModal}>
           <div className={styles.modal_content} onClick={(e) => e.stopPropagation()}>
