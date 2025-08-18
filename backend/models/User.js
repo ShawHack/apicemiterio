@@ -8,6 +8,10 @@
             type:String,
             required: true
         }, 
+          cpf:{
+            type:String,
+            required: true
+        }, 
         email:{
             type:String,
             required: true
@@ -24,6 +28,11 @@
             type:String,
             required: true
         },
+      role:{ type:String, 
+        enum: 
+        ['usuario','concessionario','admin'], 
+        default: 'usuario', index:true },
+
 
     },{timestamps:true})
  )

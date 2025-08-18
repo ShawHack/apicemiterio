@@ -53,3 +53,57 @@
    height: 100px;
    margin-left: 1em;
 }
+
+.form_container form {
+  display: flex;
+  flex-direction: column;
+  gap: 1em;
+}
+
+/* Campos de texto */
+.form_container input[type="text"],
+.form_container input[type="email"],
+.form_container input[type="password"],
+.form_container input[type="tel"] {
+  width: 100%;
+  padding: 0.8em 1em;
+  border: 2px solid #075b76;
+  border-radius: 8px;
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+/* Efeito no foco */
+.form_container input:focus {
+  border-color: #25b456;
+  box-shadow: 0 0 5px rgba(37, 180, 86, 0.5);
+}
+
+/* Labels (se você usar no Input.jsx) */
+.form_container label {
+  font-weight: bold;
+  color: #075b76;
+  margin-bottom: 0.3em;
+  display: block;
+}
+.form_control {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 1em;
+}
+
+.input {
+  width: 100%;
+  padding: 0.8em 1em;
+  border: 2px solid #075b76;
+  border-radius: 8px;
+  font-size: 1rem;
+  outline: none;
+  transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.input:focus {
+  border-color: #25b456;
+  box-shadow: 0 0 5px rgba(37, 180, 86, 0.5);
+}

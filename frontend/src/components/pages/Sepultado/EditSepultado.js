@@ -1,83 +1,75 @@
-import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../../utils/api';
 
-import styles from './AddSepultado.module.css';
-
-import SepultadoForm from '../../form/SepultadoForm.js';
-import useFlashMessage from '../../../hooks/useFlashMessage.js';
+import styles from './AddSepultado.module.css'; // reaproveitando o estilo
+import SepultadoForm from '../../form/SepultadoForm';
+import useFlashMessage from '../../../hooks/useFlashMessage';
 
 function EditSepultado() {
-  const [sep, setSep] = useState({});
+  const [sep, setSep] = useState(null);
   const { id } = useParams();
+  const navigate = useNavigate();
   const { setFlashMessage } = useFlashMessage();
 
-  // Busca os dados do sepultado
+  // Busca dados (GET público)
+  // CORREÇÃO PRINCIPAL: Removido 'sep' das dependências para evitar loop infinito
   useEffect(() => {
+    api
+      .get(`/sepultados/${id}`)
+      .then((res) => setSep(res.data))
+      .catch((err) => {
+        console.error('Erro ao buscar sepultado:', err);
+        setFlashMessage('Erro ao carregar dados do sepultado.', 'error');
+      });
+  }, [id, setFlashMessage]); // Apenas 'id' e 'setFlashMessage' como dependências
+
+  // Recebe (payload, { isFormData }) do SepultadoForm
+  const updateSep = useCallback(async (payload, { isFormData }) => {
     const token = localStorage.getItem('token');
-    
     if (!token) {
-      console.error("Token não encontrado");
+      setFlashMessage('Você precisa estar logado.', 'error');
       return;
     }
 
-    api.get(`/sepultados/${id}`, {
-      headers: {
-        Authorization: `Bearer ${JSON.parse(token)}`
-      }
-    })
-    .then((response) => {
-      setSep(response.data);
-    })
-    .catch((error) => {
-      console.error("Erro ao buscar sepultado:", error);
-    });
-  }, [id]); // ← REMOVIDO 'token' das dependências
+    try {
+      const headers = {
+        Authorization: `Bearer ${token}`,
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+      };
 
-  async function updateSep(sep) {
-    const token = localStorage.getItem('token'); // ← Obter token aqui também
-    
-    if (!token) {
-      setFlashMessage("Token não encontrado", "error");
-      return;
+      const res = await api.patch(
+        `sepultados/${id}`,           // usa o id da URL
+        payload,                      // FormData OU JSON
+        { headers }
+      );
+
+      setFlashMessage(res.data?.message || 'Registro atualizado com sucesso!', 'success');
+      
+      // CORREÇÃO SECUNDÁRIA: Redireciona para a lista de sepultados após salvar para evitar loop
+      navigate(`/meussepultados`); // Redireciona para a lista
+
+    } catch (err) {
+      const msg = err?.response?.data?.message || 'Erro ao atualizar registro';
+      setFlashMessage(msg, 'error');
     }
-
-    let msgType = 'success';
-    const formData = new FormData();
-
-    await Object.keys(sep).forEach((key) => {
-      if (key === 'images') {
-        for (let i = 0; i < sep[key].length; i++) {
-          formData.append('images', sep[key][i]);
-        }
-      } else {
-        formData.append(key, sep[key]);
-      }
-    });
-
-    const data = await api.patch(`sepultados/${sep._id}`, formData, {
-      headers: {
-        Authorization: `Bearer ${JSON.parse(token)}`,
-        'Content-Type': 'multipart/form-data'
-      }
-    }).then((response) => {
-      return response.data;
-    }).catch((err) => {
-      msgType = 'error';
-      return err.response.data;
-    });
-
-    setFlashMessage(data.message, msgType);
-  }
+  }, [id, navigate, setFlashMessage]); // Dependências para useCallback
 
   return (
     <section>
       <div className={styles.addsep_header}>
-        <h2>Editando as informações de: {sep.nome}</h2>
+        <h2>Editando as informações {sep?.nome ? `de: ${sep.nome}` : ''}</h2>
         <p>Depois da edição, os dados serão atualizados no sistema.</p>
       </div>
-      {sep.nome && (
-        <SepultadoForm handleSubmit={updateSep} btnText="Atualizar" sepultadoData={sep} />
+
+      {sep ? (
+        <SepultadoForm
+          handleSubmit={updateSep}
+          btnText="Atualizar"
+          sepultadoData={sep}
+        />
+      ) : (
+        <p>Carregando...</p>
       )}
     </section>
   );

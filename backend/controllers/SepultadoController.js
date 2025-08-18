@@ -17,111 +17,76 @@ const removeAccents = (str) => {
 };
 
 module.exports = class SepultadoController {
-    // Método para criar um novo sepultado
-    static async createSepultado(req, res) {
-        // Logs de debug para verificar o que está chegando no body e nos arquivos
-        console.log("req.body:", req.body);
-        console.log("req.files:", req.files);
-        console.log("Content-Type:", req.headers["content-type"]);
+  // Método para criar um novo sepultado (somente admin)
+static async createSepultado(req, res) {
+  try {
+    // Auth
+    const token = getToken(req);
+    const user = await getUserBytoken(token);
+    if (!user) return res.status(401).json({ message: "Não autenticado" });
 
-        // Verifica se o body foi enviado corretamente
-        if (!req.body || Object.keys(req.body).length === 0) {
-            return res.status(422).json({
-                message: "Nenhum dado foi enviado. Por favor, preencha o formulário."
-            });
-        }
-
-        // Extrai os campos do corpo da requisição
-        const {id, cemiterio, chapa, dtFal, dtNasc, idade, mae, nacionalidade, nome, pai, quadra, rua, image, epitafio,tipoSepultura,latitude,longitude } = req.body
-        const images = req.files?.images || [] // Verifica se há imagens enviadas no req.files
-
-        const available = true // Define o sepultado como disponível por padrão
-
-        // Validações obrigatórias de campos
-        if (!nome) {
-            res.status(422).json({ message: "O nome é obrigatório!" })
-            return
-        }
-        if (!chapa) {
-            res.status(422).json({ message: "A chapa é obrigatória!" })
-            return
-        }
-        if (!dtFal) {
-            res.status(422).json({ message: "A data de falecimento é obrigatória!" })
-            return
-        }
-        if (!dtNasc) {
-            res.status(422).json({ message: "A data de nascimento é obrigatória!" })
-            return
-        }
-        if (!idade) {
-            res.status(422).json({ message: "A idade é obrigatória!" })
-            return
-        }
-        if (!quadra) {
-            res.status(422).json({ message: "A quadra é obrigatória!" })
-            return
-        }
-        if (!mae) {
-            res.status(422).json({ message: "Mãe é um campo obrigatório!" })
-            return
-        }
-        if (!pai) {
-            res.status(422).json({ message: "Pai é um campo obrigatório!" })
-            return
-        }
-        
-        // Recupera o usuário logado através do token
-        const token = getToken(req)
-        const user = await getUserBytoken(token)
-        console.log("Usuário recuperado:", user);
-
-        // Cria um novo objeto do tipo Sepultado
-        const sepultado = new Sepultado({
-            id,
-            cemiterio,
-            nome,
-            chapa,
-            dtFal,
-            dtNasc,
-            idade,
-            quadra,
-            mae,
-            pai,
-            nacionalidade,
-            latitude,
-            longitude,
-            rua,
-            epitafio,
-            available,
-            images: [],
-            user: {
-                _id: user._id,
-                name: user.name,
-                image: user.image,
-                phone: user.phone
-            }
-        })
-
-        // Adiciona os nomes dos arquivos de imagem ao array `image`
-        if (images && Array.isArray(images)) {
-            images.forEach((image) => {
-                sepultado.images.push(image.filename)
-            })
-        }
-
-        try {
-            // Salva no banco e responde com sucesso
-            const newSepultado = await sepultado.save()
-            res.status(201).json({
-                message: "Sepultado cadastrado com sucesso!",
-                newSepultado,
-            })
-        } catch (error) {
-            // Trata erros internos do servidor
-            res.status(500).json({ message: error.message })
-        }
+    // Regra: somente admin cria
+    if (user.role !== 'admin') {
+      return res.status(403).json({ message: "Somente admin pode criar sepultados" });
     }
+
+    // Valida body
+    if (!req.body || Object.keys(req.body).length === 0) {
+      return res.status(422).json({ message: "Nenhum dado foi enviado. Por favor, preencha o formulário." });
+    }
+
+    const {
+      id, cemiterio, chapa, dtFal, dtNasc, idade, mae, nacionalidade, nome, pai,
+      quadra, rua, epitafio, tipoSepultura, latitude, longitude, concessionarios
+    } = req.body;
+
+    // Valida obrigatórios (mantive sua regra)
+    const obrig = { nome, chapa, dtFal, dtNasc, idade, quadra, mae, pai };
+    for (const [k, v] of Object.entries(obrig)) {
+      if (!v) return res.status(422).json({ message: `O campo ${k} é obrigatório!` });
+    }
+
+    // Imagens (multer)
+    const files = req.files?.images || [];
+    const images = Array.isArray(files) ? files.map(f => f.filename) : [];
+
+    const sepultado = new Sepultado({
+      id, cemiterio, nome, chapa, dtFal, dtNasc, idade, quadra, mae, pai,
+      nacionalidade, latitude, longitude, rua, epitafio, tipoSepultura,
+      available: true,
+      images,
+      // criador/registrador (mantendo sua estrutura atual)
+      user: { _id: user._id, name: user.name, image: user.image, phone: user.phone },
+      // admin pode atribuir concessionários já na criação (array de ObjectIds ou vazio)
+      concessionarios: Array.isArray(concessionarios) ? concessionarios : (concessionarios ? [concessionarios] : [])
+    });
+
+    const newSepultado = await sepultado.save();
+    return res.status(201).json({ message: "Sepultado cadastrado com sucesso!", newSepultado });
+  } catch (error) {
+    console.error("Erro ao criar sepultado:", error);
+    return res.status(500).json({ message: error.message });
+  }
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     // Retorna os últimos 20 sepultados cadastrados (ordenados do mais recente ao mais antigo)
     static async getAll(req, res) {
@@ -136,60 +101,170 @@ module.exports = class SepultadoController {
         }
     }
 
-    //-----------------------------comentários públicos------------------------------------------
+// GET /sepultados/:id/comentarios?page=1&limit=20
+static async listarComentarios(req, res) {
+  try {
+    const { id } = req.params
+    const page = Math.max(1, parseInt(req.query.page || '1', 10))
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit || '20', 10)))
 
-    // Adiciona um comentário público a um sepultado específico
-    static async adicionarComentario(req, res) {
-        const sepultadoId = req.params.id;
-        const { mensagem } = req.body;
+    let sep = null
+    if (mongoose.Types.ObjectId.isValid(id)) sep = await Sepultado.findById(id).select('comentarios')
+    if (!sep) sep = await Sepultado.findOne({ id }).select('comentarios')
+    if (!sep) return res.status(404).json({ message: 'Sepultado não encontrado.' })
 
-        // Verifica se a mensagem foi enviada
-        if (!mensagem) {
-            return res.status(422).json({ message: "A mensagem é obrigatória." });
-        }
+    const ordenados = [...(sep.comentarios || [])].sort(
+      (a, b) => new Date(b.createdAt || b.data || 0) - new Date(a.createdAt || a.data || 0)
+    )
+    const total = ordenados.length
+    const start = (page - 1) * limit
+    const items = ordenados.slice(start, start + limit)
 
-        try {
-            const token = getToken(req);
-            const user = await getUserBytoken(token);
+    // seu front já lida com ambos os formatos; vamos enviar objeto
+    return res.status(200).json({
+      items,
+      total,
+      page,
+      limit,
+      hasMore: start + items.length < total
+    })
+  } catch (error) {
+    console.error('Erro ao listar comentários:', error)
+    return res.status(500).json({ message: 'Erro ao listar comentários.' })
+  }
+}
 
-            const sepultado = await Sepultado.findById(sepultadoId);
+// POST /sepultados/:id/comentarios
+static async adicionarComentario(req, res) {
+  const { id } = req.params
+  const { comentario, autor } = req.body
 
-            if (!sepultado) {
-                return res.status(404).json({ message: "Sepultado não encontrado." });
-            }
+  if (!comentario || !String(comentario).trim()) {
+    return res.status(422).json({ message: 'Comentário é obrigatório.' })
+  }
 
-            // Adiciona o comentário
-            sepultado.comentarios.push({
-                nome: user.name,
-                mensagem
-            });
+  try {
+    if (!req.user?._id) return res.status(401).json({ message: 'Não autenticado' })
 
-            await sepultado.save();
+    let sep = null
+    if (mongoose.Types.ObjectId.isValid(id)) sep = await Sepultado.findById(id)
+    if (!sep) sep = await Sepultado.findOne({ id })
+    if (!sep) return res.status(404).json({ message: 'Sepultado não encontrado.' })
 
-            res.status(201).json({
-                message: "Comentário adicionado com sucesso!",
-                comentarios: sepultado.comentarios
-            });
-        } catch (error) {
-            res.status(500).json({ message: "Erro ao adicionar comentário.", error: error.message });
-        }
+    const novo = {
+      texto: String(comentario).trim(),
+      autor: (autor && String(autor).trim()) || req.user.name || 'Anônimo',
+      user: req.user._id,
+      createdAt: new Date(),
     }
 
-    // Retorna todos os sepultados criados pelo usuário logado
-    static async getAllUserSepultados(req,res){
-        try {
-            const token = getToken(req)
-            const user = await getUserBytoken(token)
+    sep.comentarios.push(novo)
+    await sep.save()
 
-            const sepults = await Sepultado.find({"user._id": user._id}).sort("-createdAt")
+    const inserido = sep.comentarios[sep.comentarios.length - 1]
+    return res.status(201).json(inserido)
+  } catch (error) {
+    console.error('Erro ao adicionar comentário:', error)
+    return res.status(500).json({ message: 'Erro ao adicionar comentário.' })
+  }
+}
 
-            res.status(200).json({
-                sepults,
-            })
-        } catch (error) {
-            res.status(500).json({ message: error.message })
-        }
+// DELETE /sepultados/:id/comentarios/:cid
+static async removerComentario(req, res) {
+  try {
+    const { id, cid } = req.params
+    if (!req.user?._id) return res.status(401).json({ message: 'Não autenticado' })
+
+    let sep = null
+    if (mongoose.Types.ObjectId.isValid(id)) sep = await Sepultado.findById(id)
+    if (!sep) sep = await Sepultado.findOne({ id })
+    if (!sep) return res.status(404).json({ message: 'Sepultado não encontrado.' })
+
+    const c = sep.comentarios.id(cid)
+    if (!c) return res.status(404).json({ message: 'Comentário não encontrado.' })
+
+    const isOwner = String(c.user) === String(req.user._id)
+    const isAdmin = req.user.role === 'admin'
+    if (!isOwner && !isAdmin) {
+      return res.status(403).json({ message: 'Sem permissão para remover este comentário.' })
     }
+
+    c.deleteOne() // remove subdoc
+    await sep.save()
+    return res.status(200).json({ message: 'Comentário removido.' })
+  } catch (error) {
+    console.error('Erro ao remover comentário:', error)
+    return res.status(500).json({ message: 'Erro ao remover comentário.' })
+  }
+}
+
+
+
+
+
+static async getAllUserSepultados(req, res) {
+  try {
+    const token = getToken(req);
+    const user = await getUserBytoken(token);
+    if (!user) return res.status(401).json({ message: 'Não autenticado' });
+
+    // parâmetros
+    const q = (req.query.q || '').trim();
+    const page = Math.max(1, parseInt(req.query.page || '1', 10));
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit || '20', 10))); // cap em 50
+    const skip = (page - 1) * limit;
+
+    // filtro base por papel
+    const role = (user.role || '').toString().trim().toLowerCase();
+    const userId = user._id;
+    let baseQuery = {};
+
+    if (role === 'admin') {
+      baseQuery = {}; // vê todos
+    } else if (role === 'concessionario') {
+      baseQuery = { $or: [{ 'user._id': userId }, { concessionarios: userId }] };
+    } else {
+      baseQuery = { 'user._id': userId };
+    }
+
+    // filtro de busca (admin encontra rápido o alvo para editar)
+    // busca por nome, rua, quadra, chapa
+    let searchQuery = {};
+    if (q) {
+      const regex = new RegExp(q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'); // escape + case-insensitive
+      searchQuery = { $or: [{ nome: regex }, { rua: regex }, { quadra: regex }, { chapa: regex }] };
+    }
+
+    const query = Object.keys(searchQuery).length ? { $and: [baseQuery, searchQuery] } : baseQuery;
+
+    const [sepults, total] = await Promise.all([
+      Sepultado.find(query).sort('-createdAt').skip(skip).limit(limit).lean(),
+      Sepultado.countDocuments(query),
+    ]);
+
+    return res.status(200).json({
+      sepults,
+      page,
+      limit,
+      total,
+      pages: Math.max(1, Math.ceil(total / limit)),
+      q,
+    });
+  } catch (error) {
+    console.error('[meussepultados] erro:', error);
+    return res.status(500).json({ message: error.message });
+  }
+}
+
+
+
+
+
+
+
+
+
+
 
     // Endpoint opcional — parece ser um esboço para futuras funcionalidades
     static async getAllInformacoes(req,res){
@@ -236,173 +311,124 @@ module.exports = class SepultadoController {
 
     //*****************remover************************************************************************************************************************ */
 
-    // Remove um sepultado por ID
-    static async removeSepById(req, res) {
-        // Obtém o ID do sepultado a partir dos parâmetros da requisição
-        const id = req.params.id;
+   // Remove um sepultado por ID (somente admin)
+static async removeSepById(req, res) {
+  const id = req.params.id;
 
-        try {
-            // Verifica se o ID fornecido é válido
-            if (!ObjectId.isValid(id)) {
-                return res.status(422).json({ message: "ID inválido!" });
-            }
-
-            // Procura o sepultado no banco de dados pelo ID
-            const sepultado = await Sepultado.findById(id);
-
-            // Se o sepultado não for encontrado, retorna erro 404
-            if (!sepultado) {
-                return res.status(404).json({ message: "Sepultado não encontrado!" });
-            }
-
-            // Obtém o token do cabeçalho da requisição
-            const token = getToken(req);
-
-            // Recupera o usuário autenticado com base no token
-            const user = await getUserBytoken(token);
-
-            // Logs de debug para verificar o ID do usuário do sepultado e o usuário atual autenticado
-            console.log("Sepultado user ID:", sepultado.user._id.toString());
-            console.log("Current user ID:", user._id.toString());
-
-            // Verifica se o usuário autenticado é o dono do sepultado
-            if (sepultado.user._id.toString() !== user._id.toString()) {
-                return res.status(403).json({ 
-                    message: "Acesso negado. Você não tem permissão para excluir este sepultado."
-                });
-            }
-
-            // Remove o sepultado do banco de dados
-            await Sepultado.findByIdAndDelete(id);
-
-            // Retorna sucesso na exclusão
-            res.status(200).json({ message: "Sepultado removido com sucesso!" });
-        } catch (error) {
-            console.error("Erro ao remover sepultado:", error);
-            // Em caso de erro interno, retorna erro 500
-            res.status(500).json({ message: error.message });
-        }
+  try {
+    if (!ObjectId.isValid(id)) {
+      return res.status(422).json({ message: "ID inválido!" });
     }
+
+    const sepultado = await Sepultado.findById(id);
+    if (!sepultado) {
+      return res.status(404).json({ message: "Sepultado não encontrado!" });
+    }
+
+    const token = getToken(req);
+    const user = await getUserBytoken(token);
+    if (!user) return res.status(401).json({ message: "Não autenticado" });
+
+    // Regra: somente admin exclui
+    if (user.role !== 'admin') {
+      return res.status(403).json({ message: "Somente admin pode excluir sepultados" });
+    }
+
+    await Sepultado.findByIdAndDelete(id);
+    return res.status(200).json({ message: "Sepultado removido com sucesso!" });
+  } catch (error) {
+    console.error("Erro ao remover sepultado:", error);
+    return res.status(500).json({ message: error.message });
+  }
+}
+
 
     // *****************************************EDITAR*************************************************************************************************************
 
-    static async updateSep(req,res){
-        const id = req.params.id
+    // Editar sepultado: admin (sempre) ou concessionario atribuído
+static async updateSep(req, res) {
+  const id = req.params.id;
 
-        try {
-            console.log(id)
-
-            // Extrai os campos do corpo da requisição
-            const { cemiterio, chapa, dtFal, dtNasc, idade, mae, nacionalidade, nome, pai, quadra, rua, image, available, tipoSepultura, epitafio, latitude, longitude } = req.body
-            const images = req.files || [];
-
-            const updatedData = {}
-
-            const sep = await Sepultado.findOne({_id : id})
-            console.log(sep)
-
-            if(!sep){
-                res.status(404).json({message: "Registro não encontrado!"})
-                return
-            }
-
-            const token = getToken(req)
-            const user = await getUserBytoken(token)
-
-            // Verifica se o usuário autenticado é o dono do sepultado
-            if (sep.user._id.toString() !== user._id.toString()) {
-                res.status(422).json({
-                    message:"Houve um problema em processar a sua solicitação, tente novamente mais tarde!"
-                })
-                return
-            }
-
-            // Validações obrigatórias de campos
-            if (!nome) {
-                res.status(422).json({ message: "O nome é obrigatório!" })
-                return
-            }else{
-                updatedData.nome = nome
-            }
-            if (!chapa) {
-                res.status(422).json({ message: "A chapa é obrigatória!" })
-                return
-            }else{
-                updatedData.chapa = chapa
-            }
-            if (!dtFal) {
-                res.status(422).json({ message: "A data de falecimento é obrigatória!" })
-                return
-            }else{
-                updatedData.dtFal = dtFal;
-            }
-            if (!dtNasc) {
-                res.status(422).json({ message: "A data de nascimento é obrigatória!" })
-                return
-            }else{
-                updatedData.dtNasc = dtNasc
-            }
-            if (!idade) {
-                res.status(422).json({ message: "A idade é obrigatória!" })
-                return
-            }else{
-                updatedData.idade = idade
-            }
-            if (!quadra) {
-                res.status(422).json({ message: "A quadra é obrigatória!" })
-                return
-            }else{
-                updatedData.quadra = quadra
-            }
-            if (!mae) {
-                res.status(422).json({ message: "Mãe é um campo obrigatório!" })
-                return
-            }else{
-                updatedData.mae = mae
-            }
-            if (!pai) {
-                res.status(422).json({ message: "Pai é um campo obrigatório!" })
-                return
-            }else{
-                updatedData.pai = pai
-            }
-
-            if (cemiterio !== undefined) {
-                updatedData.cemiterio = cemiterio;
-            }
-            if (rua !== undefined) {
-                updatedData.rua = rua;
-            }
-            if (epitafio !== undefined) {
-                updatedData.epitafio = epitafio;
-            }
-            if (nacionalidade !== undefined) {
-                updatedData.nacionalidade = nacionalidade;
-            }
-            if (tipoSepultura !== undefined) {
-                updatedData.tipoSepultura = tipoSepultura;
-            }
-            if(latitude !== undefined){
-                updatedData.latitude = latitude
-            }
-            if(longitude !== undefined){
-                updatedData.longitude = longitude
-            }
-            
-            // Processa imagens se enviadas
-            if (images && Array.isArray(images) && images.length > 0) {
-                updatedData.images = images.map(image => image.filename);
-            }
-
-            await Sepultado.findByIdAndUpdate(id, updatedData, { new: true });
-
-            res.status(200).json({ message: "Registro atualizado com sucesso!" });
-
-        } catch (error) {
-            console.error("Erro ao atualizar sepultado:", error);
-            res.status(500).json({ message: error.message });
-        }
+  try {
+    if (!ObjectId.isValid(id)) {
+      return res.status(422).json({ message: "ID inválido!" });
     }
+
+    const sep = await Sepultado.findById(id).select('concessionarios user');
+    if (!sep) return res.status(404).json({ message: "Registro não encontrado!" });
+
+    const token = getToken(req);
+    const user = await getUserBytoken(token);
+    if (!user) return res.status(401).json({ message: "Não autenticado" });
+
+    const isAdmin = user.role === 'admin';
+    const isConcessionario = user.role === 'concessionario';
+    const isAtribuido = isConcessionario && (sep.concessionarios || []).some(u => String(u) === String(user._id));
+
+    if (!isAdmin && !isAtribuido) {
+      return res.status(403).json({ message: "Sem permissão para editar este registro" });
+    }
+
+    // ---- Monta dados atualizáveis ----
+    const {
+      cemiterio, chapa, dtFal, dtNasc, idade, mae, nacionalidade, nome, pai,
+      quadra, rua, epitafio, tipoSepultura, latitude, longitude, available
+      // ATENÇÃO: concessionarios e user NÃO entram aqui para concessionário
+    } = req.body || {};
+
+    const updatedData = {};
+
+    // Validações obrigatórias (mantive sua regra; se quiser permitir parciais, podemos relaxar)
+    const obrig = { nome, chapa, dtFal, dtNasc, idade, quadra, mae, pai };
+    for (const [k, v] of Object.entries(obrig)) {
+      if (v === undefined || v === null || v === '') {
+        return res.status(422).json({ message: `O campo ${k} é obrigatório!` });
+      }
+      updatedData[k] = v;
+    }
+
+    // Campos opcionais
+    if (cemiterio !== undefined) updatedData.cemiterio = cemiterio;
+    if (rua !== undefined) updatedData.rua = rua;
+    if (epitafio !== undefined) updatedData.epitafio = epitafio;
+    if (nacionalidade !== undefined) updatedData.nacionalidade = nacionalidade;
+    if (tipoSepultura !== undefined) updatedData.tipoSepultura = tipoSepultura;
+    if (latitude !== undefined) updatedData.latitude = latitude;
+    if (longitude !== undefined) updatedData.longitude = longitude;
+    if (available !== undefined) updatedData.available = available;
+
+    // Imagens (multer: imageUpload.array('images'))
+    const files = Array.isArray(req.files) ? req.files : [];
+    if (files.length > 0) {
+      updatedData.images = files.map(f => f.filename);
+    }
+
+    // Concessionário NÃO pode alterar responsáveis nem o subdoc "user"
+    if (!isAdmin) {
+      delete req.body?.concessionarios;
+      delete req.body?.user;
+    } else {
+      // Admin pode atualizar concessionarios se vierem no body
+      if (Array.isArray(req.body?.concessionarios)) {
+        updatedData.concessionarios = req.body.concessionarios;
+      } else if (req.body?.concessionarios) {
+        updatedData.concessionarios = [req.body.concessionarios];
+      }
+      // Admin pode ajustar o subdoc user se precisar (geralmente não recomendado)
+      if (req.body?.user) {
+        updatedData.user = req.body.user;
+      }
+    }
+
+    await Sepultado.findByIdAndUpdate(id, updatedData, { new: true });
+    return res.status(200).json({ message: "Registro atualizado com sucesso!" });
+
+  } catch (error) {
+    console.error("Erro ao atualizar sepultado:", error);
+    return res.status(500).json({ message: error.message });
+  }
+}
+
 
     static async schedule(req,res){
         try {

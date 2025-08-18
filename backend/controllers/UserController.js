@@ -13,7 +13,7 @@ module.exports = class UserController {
 
   //////////////////////////////////// Método para registrar um novo usuário///////////////////////////////////////////////////////////////
   static async register(req, res) {
-    const { name, email, phone, password, confirmpassword } = req.body; // Desestrutura dados enviados pelo cliente
+    const { name,cpf, email, phone, password, confirmpassword } = req.body; // Desestrutura dados enviados pelo cliente
 
     // Verifica se o corpo da requisição existe
     if (!req.body) {
@@ -22,6 +22,7 @@ module.exports = class UserController {
 
     // Validações dos campos obrigatórios
     if (!name) return res.status(422).json({ message: 'O nome é obrigatório' });
+     if (!cpf) return res.status(422).json({ message: 'O CPF é obrigatório' });
     if (!email) return res.status(422).json({ message: 'O email é obrigatório' });
     if (!phone) return res.status(422).json({ message: 'O phone é obrigatório' });
     if (!password) return res.status(422).json({ message: 'A senha é obrigatória' });
@@ -45,6 +46,7 @@ module.exports = class UserController {
     // Cria um novo objeto User com os dados e a senha criptografada
     const user = new User({
       name: name,
+      cpf: cpf,
       email: email,
       phone: phone,
       password: passwordHash
@@ -162,89 +164,223 @@ module.exports = class UserController {
   ///////////////////////EDITAR USUÁRIO//////////////////////////////////////////////////////////////////////
 
 
-    // editar usuário
- // Método para editar usuário
-  static async editUser(req, res) {
-
-
-    
-    // Obtém o ID do usuário da URL (não é usado, pois vamos identificar o usuário pelo token)
-    const id = req.params.id;
-
-    // Recupera o token do cabeçalho da requisição
-    const token = getToken(req);
-
-    // Obtém os dados do usuário associado ao token
-    const user = await getUserByToken(token);
-
-    // Verifica se o corpo da requisição está presente
-    if (!req.body) {
-      return res.status(400).json({ message: 'Requisição inválida-provavelmente vazia!' });
+static async editUser(req, res) {
+  try {
+    const { id } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(422).json({ message: 'ID inválido' });
     }
 
-    // Desestrutura os dados enviados no corpo da requisição
-    const { name, email, phone, password, confirmpassword } = req.body;
+    const token = getToken(req);
+    const requester = await getUserByToken(token);
+    if (!requester) return res.status(401).json({ message: 'Não autenticado' });
 
-    
+    const isSelf = String(requester._id) === String(id);
+    const isAdmin = requester.role === 'admin';
+    if (!isSelf && !isAdmin) {
+      return res.status(403).json({ message: 'Somente o próprio usuário ou admin pode editar' });
+    }
 
-     if(req.file){
-      user.image = req.file.filename
-     }
+    const target = await User.findById(id);
+    if (!target) return res.status(404).json({ message: 'Usuário não encontrado!' });
 
+    // Campos permitidos (role/senha ficam fora daqui)
+    const ALLOWED = ['name', 'email', 'phone'];
+    const update = {};
 
+    if (req.file) update.image = req.file.filename;
 
+    for (const key of ALLOWED) {
+      if (Object.prototype.hasOwnProperty.call(req.body, key)) {
+        update[key] = req.body[key];
+      }
+    }
 
-
-
-
-    // Validação: nome é obrigatório
-    if (!name) {
+    if (!update.name && !update.email && !update.phone && !update.image) {
+      return res.status(422).json({ message: 'Nada para atualizar.' });
+    }
+    if (update.name !== undefined && !String(update.name).trim()) {
       return res.status(422).json({ message: 'O nome é obrigatório' });
     }
-
-    // Validação: e-mail é obrigatório
-    if (!email) {
+    if (update.email !== undefined && !String(update.email).trim()) {
       return res.status(422).json({ message: 'O email é obrigatório' });
     }
 
-    // Verifica se o e-mail já está em uso por outro usuário
-    const userExists = await User.findOne({ email: email });
-    if (user.email !== email && userExists) {
-      return res.status(422).json({ message: 'Email já está em uso por outro usuário!' });
+    // Unicidade de e-mail (compare com o e-mail do ALVO, não do admin)
+    if (update.email && update.email !== target.email) {
+      const emailEmUso = await User.findOne({ email: update.email, _id: { $ne: id } });
+      if (emailEmUso) return res.status(422).json({ message: 'E-mail já em uso por outro usuário' });
     }
 
-    // Validação: telefone é obrigatório
-    if (!phone) {
-      return res.status(422).json({ message: 'O telefone é obrigatório' });
-    }
+    // Garante que estes campos não mudam por aqui
+    delete req.body?.password;
+    delete req.body?.cpf;
+    delete req.body?.confirmpassword;
+    delete req.body?.role;
 
-    // Validação: senha é obrigatória
-    if (!password) {
-      return res.status(422).json({ message: 'A senha é obrigatória' });
-    }
-      if (!confirmpassword) return res.status(422).json({ message: 'A confirmação de senha é obrigatória' });
+    const saved = await User.findByIdAndUpdate(
+      id,
+      { $set: update },
+      { new: true, runValidators: true, projection: { password: 0 } }
+    );
 
-    // Validação: senha e confirmação devem coincidir
-    if (password !== confirmpassword) {
-      return res.status(422).json({ message: 'As senhas não coincidem' });
-    }
+    return res.status(200).json({
+      message: 'Usuário atualizado com sucesso!',
+      user: saved,
+    });
+  } catch (error) {
+    return res.status(500).json({ message: 'Erro ao atualizar usuário', error: error.message });
+  }
+}
 
-    // Atribui os novos valores ao usuário
-    user.name = name;
-    user.email = email;
-    user.phone = phone;
 
-    // Gera o hash da nova senha
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// controllers/UserController.js  (adicione dentro da classe)
+
+static async list(req, res) {
+  try {
+    // auth
+    const token = getToken(req);
+    const u = await getUserByToken(token);
+    if (!u) return res.status(401).json({ message: 'Não autenticado' });
+    if (u.role !== 'admin') return res.status(403).json({ message: 'Somente admin pode listar usuários' });
+
+    const q = (req.query.q || '').trim();
+    const page = Math.max(1, parseInt(req.query.page || '1', 10));
+    const limit = Math.min(50, Math.max(1, parseInt(req.query.limit || '20', 10)));
+    const skip = (page - 1) * limit;
+
+    const filter = q
+      ? { $or: [{ name: new RegExp(q, 'i') }, { email: new RegExp(q, 'i') }] }
+      : {};
+
+    const [users, total] = await Promise.all([
+      User.find(filter).select('_id name email role image phone createdAt').sort('-createdAt').skip(skip).limit(limit),
+      User.countDocuments(filter),
+    ]);
+
+    res.status(200).json({ users, page, limit, total, pages: Math.max(1, Math.ceil(total / limit)) });
+  } catch (err) {
+    res.status(500).json({ message: 'Erro ao listar usuários', error: err.message });
+  }
+}
+
+static async remove(req, res) {
+  try {
+    const id = req.params.id;
+
+    const token = getToken(req);
+    const u = await getUserByToken(token);
+    if (!u) return res.status(401).json({ message: 'Não autenticado' });
+    if (u.role !== 'admin') return res.status(403).json({ message: 'Somente admin pode excluir usuários' });
+
+    if (!mongoose.Types.ObjectId.isValid(id)) return res.status(422).json({ message: 'ID inválido' });
+    if (String(u._id) === String(id)) return res.status(422).json({ message: 'Você não pode excluir a si mesmo' });
+
+    const exists = await User.findById(id);
+    if (!exists) return res.status(404).json({ message: 'Usuário não encontrado' });
+
+    await User.findByIdAndDelete(id);
+    res.status(200).json({ message: 'Usuário excluído com sucesso!' });
+  } catch (err) {
+    res.status(500).json({ message: 'Erro ao excluir usuário', error: err.message });
+  }
+}
+
+static async adminCreateUser(req, res) {
+  try {
+    const token = getToken(req);
+    const admin = await getUserByToken(token);
+    if (!admin) return res.status(401).json({ message: 'Não autenticado' });
+    if (admin.role !== 'admin') return res.status(403).json({ message: 'Somente admin pode criar usuários' });
+
+    const { name, email, phone, role = 'usuario', password, confirmpassword } = req.body || {};
+    if (!name) return res.status(422).json({ message: 'O nome é obrigatório' });
+    if (!email) return res.status(422).json({ message: 'O email é obrigatório' });
+    if (!phone) return res.status(422).json({ message: 'O phone é obrigatório' });
+    if (!password) return res.status(422).json({ message: 'A senha é obrigatória' });
+    if (!confirmpassword) return res.status(422).json({ message: 'A confirmação de senha é obrigatória' });
+    if (password !== confirmpassword) return res.status(422).json({ message: 'As senhas não conferem' });
+
+    const exists = await User.findOne({ email });
+    if (exists) return res.status(422).json({ message: 'E-mail em uso' });
+
     const salt = await bcrypt.genSalt(12);
     const passwordHash = await bcrypt.hash(password, salt);
-    user.password = passwordHash;
 
-    // Tenta salvar as alterações no banco de dados
-    try {
-      await user.save();
-      res.status(200).json({ message: 'Usuário atualizado com sucesso!' });
-    } catch (error) {
-      res.status(500).json({ message: 'Erro ao atualizar usuário', error: error.message });
-    }
+    const user = new User({
+      name, email, phone, password: passwordHash, role
+    });
+
+    if (req.file) user.image = req.file.filename;
+
+    const created = await user.save();
+    // IMPORTANTE: não loga o usuário criado. Retorna dados básicos
+    res.status(201).json({
+      message: 'Usuário criado com sucesso!',
+      user: { _id: created._id, name: created.name, email: created.email, role: created.role, phone: created.phone, image: created.image }
+    });
+  } catch (err) {
+    res.status(500).json({ message: 'Erro ao criar usuário', error: err.message });
   }
+}
+
+// Dentro da classe UserController
+static async setRole(req, res) {
+  try {
+    const id = req.params.id;
+    const { role } = req.body || {};
+
+    const token = getToken(req);
+    const admin = await getUserByToken(token);
+    if (!admin) return res.status(401).json({ message: 'Não autenticado' });
+    if (admin.role !== 'admin') return res.status(403).json({ message: 'Somente admin pode alterar papéis' });
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(422).json({ message: 'ID inválido' });
+    }
+
+    const ALLOWED = ['usuario', 'concessionario', 'admin'];
+    if (!ALLOWED.includes(role)) {
+      return res.status(422).json({ message: 'Papel inválido. Use usuario, concessionario ou admin.' });
+    }
+
+    // Evita o admin se despromover acidentalmente e perder acesso
+    if (String(admin._id) === String(id) && role !== 'admin') {
+      return res.status(422).json({ message: 'Você não pode remover seu próprio papel de admin.' });
+    }
+
+    const updated = await User.findByIdAndUpdate(
+      id,
+      { $set: { role } },
+      { new: true, projection: { password: 0 }, runValidators: true }
+    );
+    if (!updated) return res.status(404).json({ message: 'Usuário não encontrado' });
+
+    return res.status(200).json({
+      message: 'Papel atualizado com sucesso!',
+      user: updated
+    });
+  } catch (err) {
+    return res.status(500).json({ message: 'Erro ao atualizar papel', error: err.message });
+  }
+}
+
+
+
 }

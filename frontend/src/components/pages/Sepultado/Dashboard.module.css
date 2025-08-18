@@ -1,16 +1,21 @@
 
-.petlist_header{
+.seplist_header{
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 2em;
 }
 
-.petlist_header h2,h1{
+.seplist_header h2,h1{
     margin: 0;
 }
 
-.petlist_header a{
+h2{
+    font-size: 34px;
+    color: #075b76;
+    text-align: center;
+}
+.seplist_header a{
     text-decoration: none;
     background-color:  #075b76;
     color: #fff;
@@ -22,18 +27,18 @@
     border: 2px solid #075b76;
 }
 
-.petlist_header a:hover{
+.seplist_header a:hover{
     background-color: transparent;
     color: #075b76;
 
 }
 
-.petlist_container{
+.seplist_container{
     display: flex;
     flex-direction: column;
 }
 
-.petlist_row{
+.seplist_row{
     border-bottom: 1px solid #075b76;
     padding: 1em;
     margin: 1em;
@@ -42,11 +47,11 @@
     width: 100%;
 }
 
-.petlist_row  img{
+.seplist_row  img{
    margin-right: 1em;
 }
 
-.petlist_row  span{
+.seplist_row  span{
   min-width: 100px;
 }
 
@@ -75,4 +80,103 @@
     background-color: transparent;
     color: #075b76;
 
+}
+
+.search_container {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin-bottom: 1em;
+}
+
+.search_input {
+  padding: 0.6em 1em;
+  border: 2px solid #075b76;
+  border-radius: 5px;
+  font-size: 14px;
+  outline: none;
+  transition: 0.3s;
+  width: 250px;
+}
+
+.search_input:focus {
+  border-color: #053b4c;
+  box-shadow: 0 0 5px rgba(7, 91, 118, 0.5);
+}
+
+.search_button {
+  background-color: #075b76;
+  color: #fff;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 0.6em 1em;
+  border-radius: 5px;
+  border: 2px solid #075b76;
+  font-size: 14px;
+  transition: 0.3s;
+}
+
+.search_button:hover {
+  background-color: transparent;
+  color: #075b76;
+}
+/* —— Filtro (barra de pesquisa) —— */
+.filter_bar {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin: 0 1em 1em 1em; /* alinha com a lista */
+  flex-wrap: wrap;
+}
+
+.filter_input {
+  flex: 1 1 260px;
+  min-width: 220px;
+  padding: 0.6em 1em;
+  border: 2px solid #075b76;
+  border-radius: 5px;
+  font-size: 14px;
+  outline: none;
+  transition: 0.3s;
+}
+
+.filter_input:focus {
+  border-color: #053b4c;
+  box-shadow: 0 0 5px rgba(7, 91, 118, 0.35);
+}
+
+/* Botões do filtro seguem o padrão da .actions */
+.filter_button {
+  background-color: #075b76;
+  color: #fff;
+  font-weight: bold;
+  cursor: pointer;
+  padding: 0.6em 1em;
+  border-radius: 5px;
+  border: 2px solid #075b76;
+  font-size: 14px;
+  transition: 0.3s;
+  text-decoration: none;
+}
+
+.filter_button:hover {
+  background-color: transparent;
+  color: #075b76;
+}
+
+/* —— Mensagens auxiliares / estados —— */
+.helptext {
+  color: #075b76;
+  font-size: 0.95rem;
+  opacity: 0.85;
+}
+
+.empty_state {
+  margin: 2em 1em;
+  padding: 1em;
+  border: 2px dashed #075b76;
+  border-radius: 6px;
+  color: #075b76;
+  text-align: center;
+  font-weight: 600;
 }

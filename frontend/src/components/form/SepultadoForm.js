@@ -1,40 +1,115 @@
 import { useState, useEffect } from "react";
-
 import formStyles from './Form.module.css';
 import Input from './input';
 import Select from "./Select";
 
 function SepultadoForm({ handleSubmit, sepultadoData, btnText }) {
-  const [sepultado, setSepultado] = useState(sepultadoData || {});
+  const [sepultado, setSepultado] = useState(() => sepultadoData || {});
   const [preview, setPreview] = useState([]);
+  const [newFiles, setNewFiles] = useState([]);
   const tipoSepultura = ["Terra", "Laje", "Gaveta", "Jazigo", "Capela"];
 
-  
+  // --- Helpers de data (string BR) ---
+  const toBR = (v) => {
+    if (!v) return '';
+    // já está em DD/MM/AAAA
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(v)) return v;
+    // veio em YYYY-MM-DD (ou YYYY-MM-DDTHH:mm:ss...)
+    if (/^\d{4}-\d{2}-\d{2}/.test(v)) {
+      const [y, m, d] = v.substring(0, 10).split('-');
+      return `${d}/${m}/${y}`;
+    }
+    // tentou ISO/outro parseável -> converte
+    const d = new Date(v);
+    if (!isNaN(d)) {
+      const dd = String(d.getUTCDate()).padStart(2, '0');
+      const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const yy = d.getUTCFullYear();
+      return `${dd}/${mm}/${yy}`;
+    }
+    // mantém se não der pra interpretar
+    return v;
+  };
+
+  const maskDateBR = (v) => {
+    const digits = (v || '').replace(/\D/g, '').slice(0, 8); // DDMMYYYY
+    if (digits.length <= 2) return digits;
+    if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+    return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+  };
+
+  const isDateBRValida = (s) => {
+    const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s || '');
+    if (!m) return false;
+    const d = Number(m[1]), mth = Number(m[2]), y = Number(m[3]);
+    if (mth < 1 || mth > 12 || d < 1 || d > 31 || y < 1000) return false;
+    const diasNoMes = [31, (y%4===0 && y%100!==0) || (y%400===0) ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    return d <= diasNoMes[mth - 1];
+  };
+
+  // Hidrata quando chega o sepultadoData (normaliza datas para BR)
   useEffect(() => {
     if (sepultadoData) {
       const imagensExistentes = sepultadoData.images || sepultadoData.image || [];
-      setPreview(imagensExistentes);
       setSepultado({
         ...sepultadoData,
+        dtNasc: toBR(sepultadoData.dtNasc),
+        dtFal: toBR(sepultadoData.dtFal),
         images: imagensExistentes,
       });
+      setPreview(imagensExistentes);
     }
-  }, [sepultadoData]); // ← SÓ sepultadoData como dependência
+  }, [sepultadoData]);
 
   function onFileChange(e) {
-    const files = Array.from(e.target.files);
-    setPreview(files); // substitui preview pelas novas imagens
-    setSepultado({ ...sepultado, images: files });
+    const files = Array.from(e.target.files || []);
+    setNewFiles(files);
+    setPreview(files.length ? files : (sepultado.images || []));
   }
 
   function handleChange(e) {
     const { name, value } = e.target;
-    setSepultado({ ...sepultado, [name]: value });
+    if (name === 'dtNasc' || name === 'dtFal') {
+      setSepultado((prev) => ({ ...prev, [name]: maskDateBR(value) }));
+      return;
+    }
+    setSepultado((prev) => ({ ...prev, [name]: value }));
+  }
+
+  // monta payload: se tiver files, usa FormData; senão JSON
+  function buildPayload() {
+    const campos = [
+      "nome","idade","dtNasc","dtFal","nacionalidade","mae","pai",
+      "cemiterio","quadra","rua","chapa","epitafio","tipoSepultura","latitude","longitude"
+    ];
+
+    if (newFiles.length > 0) {
+      const fd = new FormData();
+      campos.forEach((k) => {
+        if (sepultado[k] !== undefined && sepultado[k] !== null) fd.append(k, sepultado[k]);
+      });
+      newFiles.forEach((f) => fd.append("images", f));
+      return { payload: fd, isFormData: true };
+    }
+
+    const json = {};
+    campos.forEach((k) => {
+      if (sepultado[k] !== undefined && sepultado[k] !== null) json[k] = sepultado[k];
+    });
+    return { payload: json, isFormData: false };
   }
 
   function submit(e) {
     e.preventDefault();
-    handleSubmit(sepultado);
+
+    // valida datas (obrigatórias no backend)
+    if (!isDateBRValida(sepultado.dtNasc) || !isDateBRValida(sepultado.dtFal)) {
+      alert('Digite datas válidas no formato DD/MM/AAAA.');
+      return;
+    }
+
+    const { payload, isFormData } = buildPayload();
+    handleSubmit(payload, { isFormData });
   }
 
   function renderImages() {
@@ -49,11 +124,11 @@ function SepultadoForm({ handleSubmit, sepultadoData, btnText }) {
             />
           );
         }
-
-        const imageUrl = image.startsWith("http") || image.startsWith("/")
-          ? image
-          : `${process.env.REACT_APP_API}/images/sepultados/${image}`;
-
+        const urlBase = process.env.REACT_APP_API;
+        const imageUrl =
+          image?.startsWith("http") || image?.startsWith("/")
+            ? image
+            : `${urlBase}/images/sepultados/${image}`;
         return (
           <img
             src={imageUrl}
@@ -63,7 +138,6 @@ function SepultadoForm({ handleSubmit, sepultadoData, btnText }) {
         );
       });
     }
-
     return <p>Nenhuma imagem disponível</p>;
   }
 
@@ -103,22 +177,31 @@ function SepultadoForm({ handleSubmit, sepultadoData, btnText }) {
         max="150"
       />
 
+      {/* DATAS EM STRING BR (DD/MM/AAAA) */}
       <Input
         text="Data de Nascimento"
-        type="date"
+        type="text"
         name="dtNasc"
-        placeholder="Digite data de nascimento"
+        placeholder="DD/MM/AAAA"
         handleOnChange={handleChange}
         value={sepultado.dtNasc || ''}
+        inputMode="numeric"
+        maxLength={10}
+        pattern="\d{2}/\d{2}/\d{4}"
+        required
       />
 
       <Input
         text="Data de Falecimento"
-        type="date"
+        type="text"
         name="dtFal"
-        placeholder="Digite a data de falecimento"
+        placeholder="DD/MM/AAAA"
         handleOnChange={handleChange}
         value={sepultado.dtFal || ''}
+        inputMode="numeric"
+        maxLength={10}
+        pattern="\d{2}/\d{2}/\d{4}"
+        required
       />
 
       <Input
@@ -185,14 +268,13 @@ function SepultadoForm({ handleSubmit, sepultadoData, btnText }) {
       />
 
       <Input
-  text="Epitáfio (Opcional)"
-  type="textarea"
-  name="epitafio" // <- aqui estava errado
-  placeholder="Conte uma história de vida"
-  handleOnChange={handleChange}
-  value={sepultado.epitafio || ''}
-/>
-
+        text="Epitáfio (Opcional)"
+        type="textarea"
+        name="epitafio"
+        placeholder="Conte uma história de vida"
+        handleOnChange={handleChange}
+        value={sepultado.epitafio || ''}
+      />
 
       <Select
         name="tipoSepultura"

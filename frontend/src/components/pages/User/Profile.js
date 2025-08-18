@@ -15,19 +15,37 @@
     const [token] = useState(localStorage.getItem('token')|| '')
     const {setFlashMessage} = useFlashMessage();
 
-   useEffect(() => {
+
+
+
+   // Profile.js - useEffect corrigido
+
+useEffect(() => {
+
+  if (!token) {
+    return;
+  }
+
   api.get('/users/checkuser', {
     headers: {
-      Authorization: `Bearer ${JSON.parse(token)}`
+     
+      Authorization: `Bearer ${token}`
     }
   })
   .then((response) => {
-    setUser(response.data)
+    setUser(response.data);
   })
   .catch((err) => {
-    console.error("Erro ao buscar usuário:", err.response?.data || err.message)
-  })
-}, [token])
+    // Adicionar um log de erro mais informativo ajuda na depuração
+    console.error("Erro ao buscar dados do usuário:", err);
+    
+  });
+}, [token]);
+
+
+
+
+
 
 
     function onFileChange(e){
@@ -43,27 +61,54 @@
   setUser(updatedUser) //  Agora o estado será atualizado corretamente
     }
 
- async function handleSubmit(e){
-    e.preventDefault()
-    let msgType = 'success'
-    const formData = new FormData()
 
-   await Object.keys(user).forEach((key)=>
-       formData.append(key, user[key])
-    )
-    const data  = await api.patch(`/users/edit/${user._id}`,formData,{
-        headers:{
-             Authorization: `Bearer ${JSON.parse(token)}` ,
-             'Content-Type': 'multipart/form-data'
-        }
-    }).then((response)=>{
-       return response.data
-    }).catch((err)=>{
-        msgType= 'error'
-        return err.response.data
-    })
-    setFlashMessage(data.message,msgType)
+
+
+
+
+
+
+
+
+async function handleSubmit(e) {
+  e.preventDefault();
+  let msgType = 'success';
+  const formData = new FormData();
+
+  // Omitindo a senha e a confirmação de senha se estiverem vazias
+  const userDataToSubmit = { ...user };
+  if (!userDataToSubmit.password) {
+    delete userDataToSubmit.password;
   }
+  delete userDataToSubmit.confirmpassword; 
+
+  Object.keys(userDataToSubmit).forEach((key) => {
+    formData.append(key, userDataToSubmit[key]);
+  });
+
+  const data = await api.patch(`/users/edit/${user._id}`, formData, {
+    headers: {
+      
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'multipart/form-data'
+    }
+  }).then((response) => {
+     return response.data;
+  }).catch((err) => {
+      msgType = 'error';
+      return err.response.data;
+  });
+
+  setFlashMessage(data.message, msgType);
+}
+
+
+
+
+
+
+
+
 
 
 

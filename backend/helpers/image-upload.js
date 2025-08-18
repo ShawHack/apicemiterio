@@ -1,4 +1,4 @@
- const multer = require("multer")
+const multer = require("multer")
 const path = require("path")
 
 
@@ -23,8 +23,12 @@ const imageStorage = multer.diskStorage({
 const imageUpload = multer({
     storage : imageStorage,
     fileFilter(req,file,cb){
-        if(!file.originalname.match(/\.(png|jpg)$/)){
-         return cb(new Error("Por favor, envie apenas jpg ou png"))
+        // CORREÇÃO: Expressão regular mais robusta para aceitar .jpeg e ser case-insensitive
+        // Adicionado \. para garantir que o ponto seja literal
+        // Adicionado (png|jpg|jpeg) para incluir jpeg
+        // Adicionado i no final para tornar a correspondência case-insensitive (ex: .PNG, .JPG)
+        if(!file.originalname.match(/\.(png|jpg|jpeg)$/i)){
+         return cb(new Error("Por favor, envie apenas arquivos de imagem nos formatos JPG, JPEG ou PNG."))
         }
         cb(undefined,true)
     }

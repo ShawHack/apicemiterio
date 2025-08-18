@@ -9,48 +9,45 @@
  
  
  
- function Login(){
-
-    const [user,setUser] = useState({})
-    const {login} = useContext(Context)
+ function Login() {
+  const [user, setUser] = useState({})
+  const { login } = useContext(Context)
 
   function handleChange(e){
-      const updatedUser = { ...user, [e.target.name]: e.target.value }
-  setUser(updatedUser) //  Agora o estado será atualizado corretamente
- 
+    setUser(prev => ({ ...prev, [e.target.name]: e.target.value }))
   }
+
   function handleSubmit(e){
     e.preventDefault()
     login(user)
   }
 
-
- return(
+  return (
     <section className={styles.form_container}>
-        <h2>Login</h2>
-        <form  onSubmit={handleSubmit}>
-            <Input
-            text="E-mail"
-            type="email"
-            name="email"
-            placeholder="Digite o seu e-mail"
-            handleOnChange={handleChange}
-            />
-            <Input
-            text="Senha"
-            type="password"
-            name="password"
-            placeholder="Digite sua senha"
-            handleOnChange={handleChange}
-            />
-             <input type="submit" value="Entrar"/>
+      <h2>Login</h2>
+      <form onSubmit={handleSubmit}>
+        <Input
+          text="E-mail"
+          type="email"
+          name="email"
+          placeholder="Digite o seu e-mail"
+          handleOnChange={handleChange}
+          value={user.email || ''}          
+        />
+        <Input
+          text="Senha"
+          type="password"
+          name="password"
+          placeholder="Digite sua senha"
+          handleOnChange={handleChange}
+          value={user.password || ''}        
+        />
+        <input type="submit" value="Entrar" />
+      </form>
 
-        </form>
-        
-  <p> Não tem conta? <Link to="/register">Clique aqui</Link></p>
+      <p>Não tem conta? <Link to="/register">Clique aqui</Link></p>
     </section>
- )
-
- }
+  )
+}
 
  export default Login

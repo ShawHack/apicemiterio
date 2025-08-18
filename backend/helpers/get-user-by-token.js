@@ -1,21 +1,24 @@
- const jwt = require('jsonwebtoken')
- const User = require("../models/User")
+const jwt = require('jsonwebtoken')
+const User = require("../models/User")
 
- //
- const getUserByToken = async(token) => {
+const getUserByToken = async (token) => {
+  if (!token) {
+    return null // não retorna res aqui, deixa a rota decidir a resposta
+  }
 
-          if(!token){
-            return res.status(401).json({message: 'Acesso Negado!'})
-          }
-
-    const decoded = jwt.verify(token, 'nossosecret')
-
+  try {
+    // verifica token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || "nossosecret")
     const userId = decoded.id
-     
-    const user = await User.findOne({_id: userId})
+
+    // busca usuário no banco
+    const user = await User.findById(userId).select("-password") // não retorna senha
 
     return user
+  } catch (err) {
+    console.error("Erro ao verificar token:", err.message)
+    return null
+  }
+}
 
- }
-
-module.exports = getUserByToken;
+module.exports = getUserByToken

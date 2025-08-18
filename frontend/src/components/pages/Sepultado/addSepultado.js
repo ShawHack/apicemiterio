@@ -1,53 +1,55 @@
 import styles from './AddSepultado.module.css'
 import api from '../../../utils/api'
 
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom' // 
+import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
-//components
+// components
 import SepultadoForm from '../../form/SepultadoForm'
 
-//hooks
+// hooks
 import useFlashMessage from '../../../hooks/useFlashMessage'
 
 function AddSepultado() {
-  const [token] = useState(localStorage.getItem('token') || '')
+  const navigate = useNavigate()
   const { setFlashMessage } = useFlashMessage()
-  const navigate = useNavigate() // 
 
-  async function registerSepultado(sepultado) {
+  // token/role guard (admin-only)
+  const [token] = useState(localStorage.getItem('token') || '')
+  const authJson = JSON.parse(localStorage.getItem('auth') || '{}')
+  const role = authJson.role || localStorage.getItem('role') || 'usuario'
+
+  useEffect(() => {
+    if (role !== 'admin') {
+      setFlashMessage('Acesso restrito: somente administradores podem criar sepultados.', 'error')
+      navigate('/') // ou outra rota pública
+    }
+  }, [role, navigate, setFlashMessage])
+
+  // recebe (payload, { isFormData }) do SepultadoForm
+  async function registerSepultado(payload, { isFormData }) {
     let msgType = 'success'
-    const formData = new FormData()
 
-    Object.keys(sepultado).forEach((key) => {
-      if (key === 'images') {
-        for (let i = 0; i < sepultado[key].length; i++) {
-          formData.append('images', sepultado[key][i])
-        }
-      } else {
-        formData.append(key, sepultado[key])
+    try {
+      const headers = {
+        Authorization: `Bearer ${token}`, // não usar JSON.parse() aqui
+        // não setar Content-Type quando for FormData
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       }
-    })
 
-    const data = await api
-      .post('sepultados/create', formData, {
-        headers: {
-          Authorization: `Bearer ${JSON.parse(token)}`,
-        
-        },
-      })
-      .then((response) => {
-        return response.data
-      })
-      .catch((err) => {
-        msgType = 'error'
-        return err.response.data
-      })
+      const res = await api.post(
+        'sepultados/create',
+        payload,
+        { headers }
+      )
 
-    setFlashMessage(data.message, msgType)
-
-    if (msgType !== 'error') {
-      navigate('/sepultados/meussepultados') //  correção da navegação
+      setFlashMessage(res.data.message || 'Criado com sucesso!', 'success')
+      // seu App usa /sepultados/meumemorial
+      navigate('/sepultados/meumemorial')
+    } catch (err) {
+      msgType = 'error'
+      const msg = err?.response?.data?.message || 'Erro ao criar sepultado'
+      setFlashMessage(msg, msgType)
     }
   }
 
