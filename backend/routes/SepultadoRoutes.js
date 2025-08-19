@@ -1,4 +1,4 @@
-// routes/sepultados.js - Versão otimizada para pesquisa + comentários autenticados
+// routes/sepultados.js - Versão otimizada para pesquisa + comentários autenticados + atribuição de concessionário
 
 const express = require('express')
 const router = express.Router()
@@ -70,6 +70,53 @@ router.delete(
   '/:id/comentarios/:cid',
   verifyToken,
   SepultadoController.removerComentario
+)
+
+// -------------------- Atribuição de concessionário (somente admin) --------------------
+// Adiciona um userId ao array "concessionarios" (evita duplicatas com $addToSet)
+router.patch(
+  '/:id/atribuir/:userId',
+  verifyToken,
+  requireRole('admin'),
+  async (req, res) => {
+    try {
+      const { id, userId } = req.params
+      const sep = await Sepultado.findByIdAndUpdate(
+        id,
+        { $addToSet: { concessionarios: userId } },
+        { new: true }
+      ).populate('concessionarios', 'name email')
+
+      if (!sep) return res.status(404).json({ message: 'Sepultado não encontrado' })
+      return res.status(200).json({ message: 'Concessionário atribuído com sucesso', sep })
+    } catch (err) {
+      console.error('[atribuir] erro:', err)
+      return res.status(500).json({ message: 'Erro ao atribuir concessionário', error: err.message })
+    }
+  }
+)
+
+// Remove um userId do array "concessionarios"
+router.patch(
+  '/:id/desatribuir/:userId',
+  verifyToken,
+  requireRole('admin'),
+  async (req, res) => {
+    try {
+      const { id, userId } = req.params
+      const sep = await Sepultado.findByIdAndUpdate(
+        id,
+        { $pull: { concessionarios: userId } },
+        { new: true }
+      ).populate('concessionarios', 'name email')
+
+      if (!sep) return res.status(404).json({ message: 'Sepultado não encontrado' })
+      return res.status(200).json({ message: 'Concessionário removido com sucesso', sep })
+    } catch (err) {
+      console.error('[desatribuir] erro:', err)
+      return res.status(500).json({ message: 'Erro ao remover concessionário', error: err.message })
+    }
+  }
 )
 
 // -------------------- Remover registro (somente admin) --------------------

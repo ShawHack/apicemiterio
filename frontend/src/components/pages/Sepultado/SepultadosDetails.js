@@ -14,8 +14,9 @@ function SepultadoDetails() {
   const [carregandoComentarios, setCarregandoComentarios] = useState(false)
   const [expandedImage, setExpandedImage] = useState(null)
 
-  // ... (toda a sua lógica de hooks e funções permanece a mesma) ...
-  // (useEffect, buscarComentarios, adicionarComentario, etc. - não precisa mudar nada aqui)
+  // Detalhes dos concessionários carregados pelo front
+  const [concessionariosInfo, setConcessionariosInfo] = useState([])
+
   const [page, setPage] = useState(1)
   const [limit] = useState(10)
   const [hasMore, setHasMore] = useState(false)
@@ -49,6 +50,45 @@ function SepultadoDetails() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
+  // carregar dados (nome/email) dos concessionários
+  useEffect(() => {
+    const ids = Array.isArray(sep?.concessionarios) ? sep.concessionarios : []
+    if (!ids.length) {
+      setConcessionariosInfo([])
+      return
+    }
+
+    let isCancelled = false
+
+    async function loadAll() {
+      try {
+        const results = await Promise.allSettled(
+          ids.map((uid) =>
+            api.get(`/users/${uid}`, {
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+            })
+          )
+        )
+
+        const list = results
+          .filter(r => r.status === 'fulfilled' && r.value?.data?.user)
+          .map(r => r.value.data.user)
+          .map(u => ({
+            _id: String(u._id),
+            name: u.name,
+            email: u.email,
+          }))
+
+        if (!isCancelled) setConcessionariosInfo(list)
+      } catch (e) {
+        if (!isCancelled) setConcessionariosInfo([])
+      }
+    }
+
+    loadAll()
+    return () => { isCancelled = true }
+  }, [sep?.concessionarios, token])
+
   const buscarComentarios = async (pageArg = 1, append = false) => {
     setCarregandoComentarios(true)
     try {
@@ -81,78 +121,49 @@ function SepultadoDetails() {
     return blocked.some(w => n.includes(w.toLowerCase()))
   }
 
+  const adicionarComentario = async (e) => {
+    e.preventDefault()
+    if (!novoComentario.trim()) return
 
-
-
-
-const adicionarComentario = async (e) => {
-  e.preventDefault()
-  if (!novoComentario.trim()) return
-
-  if (!token) {
-    setFlashMessage('Você precisa estar logado para comentar.', 'error')
-    return
-  }
-
-  // (opcional) filtro local só pra UX rápida
-  if (contemProibido(novoComentario)) {
-    setFlashMessage('Seu comentário contém termos não permitidos.', 'error')
-    return
-  }
-
-  try {
-    const { data } = await api.post(
-      `/sepultados/${id}/comentarios`,
-      { comentario: novoComentario },
-      { headers: { Authorization: `Bearer ${token}` } }
-    )
-
-    setComentarios((prev) => [data, ...prev])
-    setNovoComentario('')
-    setFlashMessage('Comentário adicionado com sucesso!', 'success')
-  } catch (err) {
-    // 🔎 Debug opcional: veja exatamente o que o backend devolveu
-    console.log('ADD-COMENT ERRO:', {
-      status: err?.response?.status,
-      data: err?.response?.data,
-    })
-
-    const status = err?.response?.status
-    const data = err?.response?.data
-
-    // Extrai mensagem de forma segura (objeto ou string)
-    const backendMsg =
-      (typeof data === 'string' ? data : data?.message || data?.error) ||
-      (status === 422 ? 'Seu comentário contém termos não permitidos.' : null)
-
-    if (status === 422) {
-      setFlashMessage(backendMsg || 'Seu comentário contém termos não permitidos.', 'error')
-      return
-    }
-    if (status === 429) {
-      setFlashMessage(backendMsg || 'Muitas homenagens em pouco tempo. Tente novamente em instantes.', 'warning')
-      return
-    }
-    if (status === 401) {
-      setFlashMessage(backendMsg || 'Sua sessão expirou. Faça login novamente.', 'error')
+    if (!token) {
+      setFlashMessage('Você precisa estar logado para comentar.', 'error')
       return
     }
 
-    setFlashMessage(backendMsg || 'Erro ao adicionar comentário.', 'error')
+    if (contemProibido(novoComentario)) {
+      setFlashMessage('Seu comentário contém termos não permitidos.', 'error')
+      return
+    }
+
+    try {
+      const { data } = await api.post(
+        `/sepultados/${id}/comentarios`,
+        { comentario: novoComentario }, // mantém conforme seu front atual
+        { headers: { Authorization: `Bearer ${token}` } }
+      )
+
+      setComentarios((prev) => [data, ...prev])
+      setNovoComentario('')
+      setFlashMessage('Comentário adicionado com sucesso!', 'success')
+    } catch (err) {
+      console.log('ADD-COMENT ERRO:', {
+        status: err?.response?.status,
+        data: err?.response?.data,
+      })
+
+      const status = err?.response?.status
+      const data = err?.response?.data
+      const backendMsg =
+        (typeof data === 'string' ? data : data?.message || data?.error) ||
+        (status === 422 ? 'Seu comentário contém termos não permitidos.' : null)
+
+      if (status === 422) return setFlashMessage(backendMsg || 'Seu comentário contém termos não permitidos.', 'error')
+      if (status === 429) return setFlashMessage(backendMsg || 'Muitas homenagens em pouco tempo. Tente novamente em instantes.', 'warning')
+      if (status === 401) return setFlashMessage(backendMsg || 'Sua sessão expirou. Faça login novamente.', 'error')
+
+      setFlashMessage(backendMsg || 'Erro ao adicionar comentário.', 'error')
+    }
   }
-}
-
-
-
-
-
-
-
-
-
-
-
-
 
   const podeApagar = (c) => {
     if (!roleLoaded) return false
@@ -173,44 +184,49 @@ const adicionarComentario = async (e) => {
     }
   }
 
-// 10/08/2025 10:23 (pt-BR, 24h)
-const mostrarCreatedAt = (v) => {
-  if (!v) return ''
-  try {
-    const d = new Date(v)
-    if (isNaN(d.getTime())) return String(v)
-    return d.toLocaleString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: false,    // força 24h
-    })
-  } catch {
-    return String(v)
+  // 10/08/2025 10:23 (pt-BR, 24h)
+  const mostrarCreatedAt = (v) => {
+    if (!v) return ''
+    try {
+      const d = new Date(v)
+      if (isNaN(d.getTime())) return String(v)
+      return d.toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false,
+      })
+    } catch {
+      return String(v)
+    }
   }
-}
-
 
   const handleImageClick = (imageUrl) => setExpandedImage(imageUrl)
   const handleCloseModal = () => setExpandedImage(null)
 
-  // --- INÍCIO DA LÓGICA DE IMAGEM ---
-  // Criamos uma lista de URLs seguras para as imagens
-  const API = (process.env.REACT_APP_API || '').replace(/\/+$/, '');
-  const imageList = Array.isArray(sep?.images) ? sep.images : [];
-  const imageSources = imageList.map(img => {
-    const cleaned = typeof img === 'string' ? img.trim() : '';
-    const isBad = !cleaned || cleaned === 'null' || cleaned === 'undefined' || cleaned === '/';
-    return !isBad ? `${API}/images/sepultados/${cleaned}` : '/sepultura-padrao.png';
-  }).filter(Boolean); // Filtra qualquer valor nulo que possa ter sobrado
+  // --- IMAGENS (com fallback) ---
+  const API = (process.env.REACT_APP_API || '').replace(/\/+$/, '')
+  const imageList = Array.isArray(sep?.images) ? sep.images : []
+  const imageSources = imageList
+    .map(img => {
+      const cleaned = typeof img === 'string' ? img.trim() : ''
+      const isBad = !cleaned || cleaned === 'null' || cleaned === 'undefined' || cleaned === '/'
+      return !isBad ? `${API}/images/sepultados/${cleaned}` : '/sepultura-padrao.png'
+    })
+    .filter(Boolean)
+  if (imageSources.length === 0 && sep?._id) imageSources.push('/sepultura-padrao.png')
 
-  // Se não houver nenhuma imagem válida, garantimos que a padrão seja exibida
-  if (imageSources.length === 0 && sep?._id) {
-    imageSources.push('/sepultura-padrao.png');
-  }
-  // --- FIM DA LÓGICA DE IMAGEM ---
+  // --- ADMINISTRADORES (banner) ---
+  const hasCons = Array.isArray(sep?.concessionarios) && sep.concessionarios.length > 0
+  const adminDisplay = hasCons
+    ? (concessionariosInfo.length > 0
+        ? concessionariosInfo
+            .map(u => (u?.name ? `${u.name}${u.email ? ` (${u.email})` : ''}` : (u?.email || u?._id)))
+            .join(', ')
+        : 'carregando administradores…')
+    : 'Cemiterio Santa Faustina'
 
   return (
     <section className={styles.sepultado_details_container}>
@@ -218,7 +234,8 @@ const mostrarCreatedAt = (v) => {
         <h1>{sep?.nome || 'Carregando...'}</h1>
       </div>
 
-      {/* --- SEÇÃO DE IMAGENS CORRIGIDA --- */}
+     
+
       {imageSources.length > 0 && (
         <div className={styles.sepultado_images}>
           {imageSources.map((src, index) => (
@@ -227,17 +244,13 @@ const mostrarCreatedAt = (v) => {
               alt={`${sep?.nome || 'Sepultado'} - foto ${index + 1}`}
               key={index}
               onClick={() => handleImageClick(src)}
-              // Adicionamos um onError como segurança extra
-              onError={(e) => { e.currentTarget.src = '/sepultura-padrao.png'; }}
+              onError={(e) => { e.currentTarget.src = '/sepultura-padrao.png' }}
             />
           ))}
         </div>
       )}
-      {/* --- FIM DA SEÇÃO DE IMAGENS --- */}
 
-      {/* O resto do seu JSX permanece exatamente o mesmo */}
       <div className={styles.main_content}>
-        {/* ... (coluna da esquerda com informações) ... */}
         <div className={styles.left_column}>
           <div className={styles.info_section}>
             <h3>Dados Pessoais</h3>
@@ -295,6 +308,45 @@ const mostrarCreatedAt = (v) => {
             </div>
           </div>
 
+          {/* Seção de responsáveis / concessionários */}
+          <div className={styles.info_section}>
+            <h3>Responsável</h3>
+            <div className={styles.info_grid}>
+              {/* Dono criador (sempre existe) */}
+             
+
+              {/* Lista de concessionários (pode estar vazia) */}
+              <div className={styles.info_item} style={{ display: 'block' }}>
+                <span className={styles.label}>Moderador da página:</span>
+                <div className={styles.value}>
+                  {Array.isArray(sep?.concessionarios) && sep.concessionarios.length > 0 ? (
+                    <ul style={{ margin: 0, paddingLeft: '1.2rem' }}>
+                      {concessionariosInfo.length > 0 ? (
+                        concessionariosInfo.map((u) => (
+                          <li key={u._id}>
+                            <strong>{u.name}</strong>
+                            
+                            {userId && String(u._id) === String(userId) ? ' (você)' : ''}
+                          </li>
+                        ))
+                      ) : (
+                        // fallback: mostra apenas os IDs enquanto carrega nomes/emails
+                        sep.concessionarios.map((cid) => (
+                          <li key={String(cid)}>
+                            <code style={{ fontSize: 12, color: '#9ca3af' }}>{String(cid)}</code>
+                            {userId && String(cid) === String(userId) ? ' (você)' : ''}
+                          </li>
+                        ))
+                      )}
+                    </ul>
+                  ) : (
+                    <span>— Nenhum moderador atribuído.</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div className={styles.epitafio_section}>
             <h3>Epitáfio</h3>
             <div className={styles.epitafio_content}>
@@ -302,7 +354,8 @@ const mostrarCreatedAt = (v) => {
             </div>
           </div>
         </div>
-        {/* ... (coluna da direita com comentários) ... */}
+
+        {/* Coluna da direita (comentários) */}
         <div className={styles.right_column}>
           <div className={styles.comments_section}>
             <h3>Homenagens</h3>

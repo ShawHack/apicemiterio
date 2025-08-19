@@ -1,3 +1,4 @@
+// src/components/pages/sepultados/EditSepultado.js
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../../../utils/api';
@@ -12,8 +13,7 @@ function EditSepultado() {
   const navigate = useNavigate();
   const { setFlashMessage } = useFlashMessage();
 
-  // Busca dados (GET público)
-  // CORREÇÃO PRINCIPAL: Removido 'sep' das dependências para evitar loop infinito
+  // Carrega o registro (GET público)
   useEffect(() => {
     api
       .get(`/sepultados/${id}`)
@@ -22,38 +22,38 @@ function EditSepultado() {
         console.error('Erro ao buscar sepultado:', err);
         setFlashMessage('Erro ao carregar dados do sepultado.', 'error');
       });
-  }, [id, setFlashMessage]); // Apenas 'id' e 'setFlashMessage' como dependências
+  }, [id, setFlashMessage]);
 
-  // Recebe (payload, { isFormData }) do SepultadoForm
-  const updateSep = useCallback(async (payload, { isFormData }) => {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      setFlashMessage('Você precisa estar logado.', 'error');
-      return;
-    }
+  // Atualiza (somente dados do formulário; nada de concessionários aqui)
+  const updateSep = useCallback(
+    async (payload, { isFormData }) => {
+      const token = localStorage.getItem('token');
+      if (!token) {
+        setFlashMessage('Você precisa estar logado.', 'error');
+        return;
+      }
 
-    try {
-      const headers = {
-        Authorization: `Bearer ${token}`,
-        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
-      };
+      try {
+        const headers = {
+          Authorization: `Bearer ${token}`,
+          ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+        };
 
-      const res = await api.patch(
-        `sepultados/${id}`,           // usa o id da URL
-        payload,                      // FormData OU JSON
-        { headers }
-      );
+        const res = await api.patch(
+          `sepultados/${id}`,
+          payload, // FormData OU JSON (sem mexer em concessionários)
+          { headers }
+        );
 
-      setFlashMessage(res.data?.message || 'Registro atualizado com sucesso!', 'success');
-      
-      // CORREÇÃO SECUNDÁRIA: Redireciona para a lista de sepultados após salvar para evitar loop
-      navigate(`/meussepultados`); // Redireciona para a lista
-
-    } catch (err) {
-      const msg = err?.response?.data?.message || 'Erro ao atualizar registro';
-      setFlashMessage(msg, 'error');
-    }
-  }, [id, navigate, setFlashMessage]); // Dependências para useCallback
+        setFlashMessage(res.data?.message || 'Registro atualizado com sucesso!', 'success');
+        navigate('/meussepultados');
+      } catch (err) {
+        const msg = err?.response?.data?.message || 'Erro ao atualizar registro';
+        setFlashMessage(msg, 'error');
+      }
+    },
+    [id, navigate, setFlashMessage]
+  );
 
   return (
     <section>

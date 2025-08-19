@@ -7,6 +7,7 @@ const UserController = require("../controllers/UserController");
 const verifyToken = require("../helpers/verify-token");
 const { imageUpload } = require("../helpers/image-upload");
 const { requireSelfOrAdmin } = require("../helpers/authz");
+const { requireRole } = require('../helpers/authz') 
 
 // Auth & leitura
 router.post("/register", UserController.register);
@@ -36,6 +37,21 @@ router.patch(
   imageUpload.single("image"),
   UserController.editUser
 );
+
+
+
+router.post(
+  "/admin-create",
+  verifyToken,
+  requireRole('admin'),
+  imageUpload.single("image"),
+  UserController.adminCreateUser
+);
+
+
+// routes/users.js
+router.get('/concessionarios', verifyToken, requireRole('admin'), UserController.listConcessionarios)
+
 
 // Buscar por id (deixe por último entre as GET específicas)
 router.get("/:id", UserController.getUserById);

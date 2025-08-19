@@ -19,6 +19,7 @@ app.use(cors({ credentials: true, origin: 'http://localhost:3000' }));
 // Define a pasta 'public' como pública para servir arquivos estáticos (ex: imagens)
 app.use(express.static('public'));
 
+
 // Importa as rotas relacionadas ao usuário do arquivo 'UserRoutes.js'
 const UserRoutes = require('./routes/UserRoutes');
 
@@ -31,4 +32,12 @@ app.use('/sepultados', SepultadoRoutes);
 // Inicia o servidor na porta 5000 e imprime uma mensagem no console ao iniciar
 app.listen(5000, () => {
   console.log('Servidor rodando na porta 5000');
+
+
+  app.use((err, req, res, next) => {
+  console.error('[ERR]', err); // <— veja aqui a causa/stack
+  if (res.headersSent) return next(err);
+  res.status(500).json({ message: 'Erro interno do servidor' });
+});
+
 });

@@ -733,4 +733,116 @@ static async searchSepultados(req, res) {
             res.status(500).json({ autocomplete: [] })
         }
     }
+
+
+
+// ATRIBUIR um concessionário ao sepultado
+static async assignConcessionario(req, res) {
+  try {
+    const id = req.params.id;                        // sepultado
+    const { userId } = req.body || {};               // opcional p/ admin
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(422).json({ message: "ID do sepultado inválido!" });
+    }
+
+    const token = getToken(req);
+    const user = await getUserBytoken(token);
+    if (!user) return res.status(401).json({ message: "Não autenticado" });
+
+    const sep = await Sepultado.findById(id).select('concessionarios');
+    if (!sep) return res.status(404).json({ message: "Sepultado não encontrado!" });
+
+    const isAdmin = user.role === 'admin';
+    const isConcessionario = user.role === 'concessionario';
+
+    // Quem será atribuído?
+    let targetUserId = isAdmin ? userId : user._id;
+
+    if (!targetUserId || !ObjectId.isValid(String(targetUserId))) {
+      return res.status(422).json({ message: "userId inválido (ou ausente)." });
+    }
+
+    // Concessionário só pode se atribuir a si mesmo
+    if (isConcessionario && String(targetUserId) !== String(user._id)) {
+      return res.status(403).json({ message: "Concessionário só pode se atribuir a si próprio." });
+    }
+
+    // Admin pode atribuir qualquer um; usuário comum não pode
+    if (!isAdmin && !isConcessionario) {
+      return res.status(403).json({ message: "Sem permissão para atribuir." });
+    }
+
+    const updated = await Sepultado.findByIdAndUpdate(
+      id,
+      { $addToSet: { concessionarios: targetUserId } },
+      { new: true, select: 'concessionarios' }
+    );
+
+    return res.status(200).json({
+      message: "Concessionário atribuído com sucesso!",
+      concessionarios: updated.concessionarios,
+    });
+  } catch (error) {
+    console.error("assignConcessionario erro:", error);
+    return res.status(500).json({ message: error.message });
+  }
+}
+
+// REMOVER atribuição de concessionário
+static async unassignConcessionario(req, res) {
+  try {
+    const id = req.params.id;
+    const { userId } = req.body || {};
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(422).json({ message: "ID do sepultado inválido!" });
+    }
+
+    const token = getToken(req);
+    const user = await getUserBytoken(token);
+    if (!user) return res.status(401).json({ message: "Não autenticado" });
+
+    const sep = await Sepultado.findById(id).select('concessionarios');
+    if (!sep) return res.status(404).json({ message: "Sepultado não encontrado!" });
+
+    const isAdmin = user.role === 'admin';
+    const isConcessionario = user.role === 'concessionario';
+
+    let targetUserId = isAdmin ? userId : user._id;
+
+    if (!targetUserId || !ObjectId.isValid(String(targetUserId))) {
+      return res.status(422).json({ message: "userId inválido (ou ausente)." });
+    }
+
+    // Concessionário só pode remover a si mesmo
+    if (isConcessionario && String(targetUserId) !== String(user._id)) {
+      return res.status(403).json({ message: "Concessionário só pode remover a própria atribuição." });
+    }
+
+    if (!isAdmin && !isConcessionario) {
+      return res.status(403).json({ message: "Sem permissão para remover atribuição." });
+    }
+
+    const updated = await Sepultado.findByIdAndUpdate(
+      id,
+      { $pull: { concessionarios: targetUserId } },
+      { new: true, select: 'concessionarios' }
+    );
+
+    return res.status(200).json({
+      message: "Atribuição removida com sucesso!",
+      concessionarios: updated.concessionarios,
+    });
+  } catch (error) {
+    console.error("unassignConcessionario erro:", error);
+    return res.status(500).json({ message: error.message });
+  }
+}
+
+
+
+
+
+
 }

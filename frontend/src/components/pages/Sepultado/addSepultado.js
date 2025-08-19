@@ -1,7 +1,8 @@
+// src/components/pages/sepultados/addSepultado.js
 import styles from './AddSepultado.module.css'
 import api from '../../../utils/api'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 // components
@@ -10,48 +11,77 @@ import SepultadoForm from '../../form/SepultadoForm'
 // hooks
 import useFlashMessage from '../../../hooks/useFlashMessage'
 
+function readTokenLS() {
+  const fromAuth = JSON.parse(localStorage.getItem('auth') || '{}')?.token
+  if (fromAuth) return fromAuth
+  const raw = localStorage.getItem('token')
+  if (!raw) return ''
+  try { return JSON.parse(raw) } catch { return raw.replace(/^"+|"+$/g, '') }
+}
+
 function AddSepultado() {
   const navigate = useNavigate()
   const { setFlashMessage } = useFlashMessage()
 
-  // token/role guard (admin-only)
-  const [token] = useState(localStorage.getItem('token') || '')
-  const authJson = JSON.parse(localStorage.getItem('auth') || '{}')
-  const role = authJson.role || localStorage.getItem('role') || 'usuario'
+  const token = useMemo(() => readTokenLS(), [])
+  const [role, setRole] = useState('usuario')
+  const isAdmin = role === 'admin'
 
+  // lista para o select (apenas admin vê)
+  const [concessionarios, setConcessionarios] = useState([]) // [{_id,name,email}]
+
+  // guarda de acesso + papel
   useEffect(() => {
-    if (role !== 'admin') {
-      setFlashMessage('Acesso restrito: somente administradores podem criar sepultados.', 'error')
-      navigate('/') // ou outra rota pública
+    if (!token) {
+      setFlashMessage('Você precisa estar logado.', 'error')
+      navigate('/')
+      return
     }
-  }, [role, navigate, setFlashMessage])
+
+    api.get('/users/checkuser', { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => {
+        const r = String(res?.data?.role || 'usuario')
+        setRole(r)
+        if (r !== 'admin') {
+          setFlashMessage('Acesso restrito: somente administradores podem criar sepultados.', 'error')
+          navigate('/')
+        }
+      })
+      .catch(() => {
+        setFlashMessage('Sessão inválida. Faça login novamente.', 'error')
+        navigate('/')
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token])
+
+  // carregar lista de concessionários se admin
+  useEffect(() => {
+    if (!isAdmin) return
+    api.get('/users/concessionarios', { headers: { Authorization: `Bearer ${token}` } })
+      .then((res) => {
+        const items = Array.isArray(res?.data?.items) ? res.data.items : (Array.isArray(res?.data) ? res.data : [])
+        setConcessionarios(items)
+      })
+      .catch(() => setConcessionarios([]))
+  }, [isAdmin, token])
 
   // recebe (payload, { isFormData }) do SepultadoForm
-  async function registerSepultado(payload, { isFormData }) {
-    let msgType = 'success'
-
+  const registerSepultado = useCallback(async (payload, { isFormData }) => {
     try {
       const headers = {
-        Authorization: `Bearer ${token}`, // não usar JSON.parse() aqui
-        // não setar Content-Type quando for FormData
+        Authorization: `Bearer ${token}`,
         ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
       }
 
-      const res = await api.post(
-        'sepultados/create',
-        payload,
-        { headers }
-      )
+      const res = await api.post('sepultados/create', payload, { headers })
 
-      setFlashMessage(res.data.message || 'Criado com sucesso!', 'success')
-      // seu App usa /sepultados/meumemorial
+      setFlashMessage(res.data?.message || 'Criado com sucesso!', 'success')
       navigate('/sepultados/meumemorial')
     } catch (err) {
-      msgType = 'error'
       const msg = err?.response?.data?.message || 'Erro ao criar sepultado'
-      setFlashMessage(msg, msgType)
+      setFlashMessage(msg, 'error')
     }
-  }
+  }, [token, navigate, setFlashMessage])
 
   return (
     <section className={styles.addsep_header}>
@@ -63,7 +93,15 @@ function AddSepultado() {
         </p>
       </div>
 
-      <SepultadoForm handleSubmit={registerSepultado} btnText="Cadastrar" />
+      {/* Passamos as opções e a flag isAdmin para o form.
+         O SepultadoForm deve renderizar um <select multiple> quando isAdmin=true
+         e escrever/ler o campo "concessionarios" (array de IDs) no payload. */}
+      <SepultadoForm
+        handleSubmit={registerSepultado}
+        btnText="Cadastrar"
+        concessionariosDisponiveis={concessionarios}
+        isAdmin={isAdmin}
+      />
     </section>
   )
 }

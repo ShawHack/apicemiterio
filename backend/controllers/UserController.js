@@ -236,8 +236,75 @@ static async editUser(req, res) {
 
 
 
+// controllers/UserController.js
+static async listConcessionarios(req, res) {
+  try {
+    const users = await User.find({ role: 'concessionario' }).select('_id name email')
+    res.json(users)
+  } catch (err) {
+    res.status(500).json({ message: 'Erro ao listar concessionários' })
+  }
+}
 
 
+
+
+// controllers/UserController.js
+static async adminCreateUser(req, res) {
+  try {
+    const token = getToken(req);
+    const admin = await getUserByToken(token);
+    if (!admin) return res.status(401).json({ message: 'Não autenticado' });
+    if (admin.role !== 'admin') return res.status(403).json({ message: 'Somente admin pode criar usuários' });
+
+    // 👇 incluir cpf e validar
+    const { name, cpf, email, phone, role = 'usuario', password, confirmpassword } = req.body || {};
+    if (!name) return res.status(422).json({ message: 'O nome é obrigatório' });
+    if (!cpf) return res.status(422).json({ message: 'O CPF é obrigatório' });
+    if (!email) return res.status(422).json({ message: 'O email é obrigatório' });
+    if (!phone) return res.status(422).json({ message: 'O phone é obrigatório' });
+    if (!password) return res.status(422).json({ message: 'A senha é obrigatória' });
+    if (!confirmpassword) return res.status(422).json({ message: 'A confirmação de senha é obrigatória' });
+    if (password !== confirmpassword) return res.status(422).json({ message: 'As senhas não conferem' });
+
+    // unicidade (email e, se quiser, cpf)
+    const existsEmail = await User.findOne({ email });
+    if (existsEmail) return res.status(422).json({ message: 'E-mail em uso' });
+
+    const existsCpf = await User.findOne({ cpf });
+    if (existsCpf) return res.status(422).json({ message: 'CPF já cadastrado' });
+
+    const salt = await bcrypt.genSalt(12);
+    const passwordHash = await bcrypt.hash(password, salt);
+
+    const user = new User({
+      name,
+      cpf,              // 👈 salvar cpf
+      email,
+      phone,
+      password: passwordHash,
+      role,
+    });
+
+    if (req.file) user.image = req.file.filename;
+
+    const created = await user.save();
+    return res.status(201).json({
+      message: 'Usuário criado com sucesso!',
+      user: {
+        _id: created._id,
+        name: created.name,
+        cpf: created.cpf,
+        email: created.email,
+        role: created.role,
+        phone: created.phone,
+        image: created.image,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ message: 'Erro ao criar usuário', error: err.message });
+  }
+}
 
 
 
