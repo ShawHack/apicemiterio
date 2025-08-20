@@ -9,7 +9,7 @@ const createUserToken = async (user, req, res) => {
         name: user.name, 
         role: user.role 
       },
-      process.env.JWT_SECRET || "nossosecret",
+      process.env.JWT_SECRET || process.env.JWT_SECRET,
       { expiresIn: "7d" } // ajusta conforme sua necessidade
     )
 

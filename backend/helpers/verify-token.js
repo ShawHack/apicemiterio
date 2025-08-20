@@ -16,7 +16,7 @@ const verifyToken = async (req, res, next) => {
     }
 
     // Decodifica o JWT
-    const verified = jwt.verify(token, 'nossosecret')
+    const verified = jwt.verify(token, process.env.JWT_SECRET)
     // Alguns tokens usam "_id", outros "id"
     const verifiedId = String(verified.id || verified._id || '')
 

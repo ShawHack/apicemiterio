@@ -8,7 +8,7 @@ const getUserByToken = async (token) => {
 
   try {
     // verifica token
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || "nossosecret")
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || process.env.JWT_SECRET)
     const userId = decoded.id
 
     // busca usuário no banco
