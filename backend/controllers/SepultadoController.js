@@ -134,40 +134,55 @@ static async listarComentarios(req, res) {
   }
 }
 
-// POST /sepultados/:id/comentarios
+// Adiciona um comentário público a um sepultado específico (versão com $push + retorno do item criado)
 static async adicionarComentario(req, res) {
-  const { id } = req.params
-  const { comentario, autor } = req.body
+  const sepultadoId = req.params.id;
 
-  if (!comentario || !String(comentario).trim()) {
-    return res.status(422).json({ message: 'Comentário é obrigatório.' })
+  // aceita 'mensagem' OU 'comentario' OU 'texto'
+  const rawMsg = (
+    req.body?.mensagem ??
+    req.body?.comentario ??
+    req.body?.texto ??
+    ''
+  ).toString().trim();
+
+  if (!rawMsg) {
+    return res.status(422).json({ message: "A mensagem é obrigatória." });
   }
 
   try {
-    if (!req.user?._id) return res.status(401).json({ message: 'Não autenticado' })
+    const token = getToken(req);
+    const user = await getUserBytoken(token); // requer login
+    if (!user) return res.status(401).json({ message: "Não autenticado." });
 
-    let sep = null
-    if (mongoose.Types.ObjectId.isValid(id)) sep = await Sepultado.findById(id)
-    if (!sep) sep = await Sepultado.findOne({ id })
-    if (!sep) return res.status(404).json({ message: 'Sepultado não encontrado.' })
+    // garante que existe
+    const existe = await Sepultado.findById(sepultadoId).select('_id');
+    if (!existe) return res.status(404).json({ message: "Sepultado não encontrado." });
 
     const novo = {
-      texto: String(comentario).trim(),
-      autor: (autor && String(autor).trim()) || req.user.name || 'Anônimo',
-      user: req.user._id,
-      createdAt: new Date(),
-    }
+      nome: user?.name || 'Anônimo',
+      mensagem: rawMsg,
+      data: new Date(),
+    };
 
-    sep.comentarios.push(novo)
-    await sep.save()
+    // empurra sem revalidar o doc inteiro
+    await Sepultado.updateOne({ _id: sepultadoId }, { $push: { comentarios: novo } });
 
-    const inserido = sep.comentarios[sep.comentarios.length - 1]
-    return res.status(201).json(inserido)
+    // 🔙 responda exatamente no shape que o front rende:
+    return res.status(201).json({
+      autor: novo.nome,
+      texto: novo.mensagem,
+      createdAt: novo.data
+    });
   } catch (error) {
-    console.error('Erro ao adicionar comentário:', error)
-    return res.status(500).json({ message: 'Erro ao adicionar comentário.' })
+    return res.status(500).json({ message: "Erro ao adicionar comentário.", error: error.message });
   }
 }
+
+
+
+
+
 
 // DELETE /sepultados/:id/comentarios/:cid
 static async removerComentario(req, res) {
